@@ -24,21 +24,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('permissions', PermissionController::class)->middleware('permission:access-permissions-module');
     Route::resource('roles', RoleController::class)->middleware('permission:access-roles-module');
     Route::resource('users', UserController::class)->middleware('permission:access-users-module');
-});
-
-Route::prefix('qr-print')->group(function () {
-
-    Route::get('/', [QrPrintController::class, 'index'])
+    Route::get('qr-print', [QrPrintController::class, 'index'])
         ->name('qr-print.index');
 
-    Route::post('/', [QrPrintController::class, 'store'])
+    Route::post('qr-print', [QrPrintController::class, 'store'])
         ->name('qr-print.store');
 
-    Route::get('/{qrPrint}/qr', [QrPrintController::class, 'qr'])
+    Route::get('qr-print/{qrPrint}/qr', [QrPrintController::class, 'qr'])
         ->name('qr-print.qr');
-
-    Route::post('/{qrPrint}/printed', [QrPrintController::class, 'printed'])
-        ->name('qr-print.printed');
 });
 
 /*
@@ -51,29 +44,24 @@ require __DIR__ . '/settings.php';
 require __DIR__ . '/auth.php';
 
 Route::get(
-    '/qr-print',
-    [QrPrintController::class, 'index']
-)->name('qr-print.index');
-
-Route::post(
-    '/qr-print',
-    [QrPrintController::class, 'store']
-)->name('qr-print.store');
-
-Route::get(
-    '/qr/{qrPrint}',
-    [QrPrintController::class, 'qr']
-)->name('qr-print.qr');
-
-Route::get(
     '/print/{token}',
     [QrPrintController::class, 'print']
 )->name('qr-print.print');
+
+Route::get(
+    '/print/{token}/content',
+    [QrPrintController::class, 'printContent']
+)->name('qr-print.content');
 
 Route::post(
     '/print/{token}/upload',
     [QrPrintController::class, 'upload']
 )->name('qr-print.upload');
+
+Route::post(
+    '/qr-print/{qrPrint}/printed',
+    [QrPrintController::class, 'printed']
+)->name('qr-print.printed');
 
 Route::get(
     '/print/{token}/document/{document}',

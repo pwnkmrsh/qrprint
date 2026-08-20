@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use Endroid\QrCode\Writer\SvgWriter;
 use App\Models\PrintDocument;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 class QrPrintController extends Controller
 {
@@ -20,9 +21,17 @@ class QrPrintController extends Controller
      */
     public function index()
     {
-        $prints = QrPrint::latest()->get();
+        $prints = QrPrint::latest()->get()->map(fn (QrPrint $qrPrint) => [
+            'id' => $qrPrint->id,
+            'title' => $qrPrint->title,
+            'print_count' => $qrPrint->print_count,
+            'is_active' => $qrPrint->is_active,
+            'created_at' => $qrPrint->created_at?->toDateTimeString(),
+            'qr_url' => route('qr-print.qr', $qrPrint),
+            'print_url' => route('qr-print.print', $qrPrint->print_token),
+        ]);
 
-        return view('qr-print.index', compact('prints'));
+        return Inertia::render('qr-print/index', compact('prints'));
     }
 
     /**
@@ -83,13 +92,18 @@ class QrPrintController extends Controller
      * Mobile QR scan page
      */
     public function print(string $token)
-{
-    $qrPrint = QrPrint::where('print_token', $token)
-        ->where('is_active', true)
-        ->firstOrFail();
+    {
+        $qrPrint = QrPrint::where('print_token', $token)
+            ->where('is_active', true)
+            ->firstOrFail();
 
-    return view('qr-print.print', compact('qrPrint'));
-}
+        return Inertia::render('qr-print/print', [
+            'qrPrint' => [
+                'title' => $qrPrint->title,
+                'upload_url' => route('qr-print.upload', $qrPrint->print_token),
+            ],
+        ]);
+    }
 
     /**
      * Record successful browser print request
@@ -105,6 +119,22 @@ class QrPrintController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Print recorded successfully.',
+        ]);
+    }
+
+    public function printContent(string $token)
+    {
+        $qrPrint = QrPrint::where('print_token', $token)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        return Inertia::render('qr-print/print-content', [
+            'qrPrint' => [
+                'title' => $qrPrint->title,
+                'uuid' => $qrPrint->uuid,
+                'content' => $qrPrint->content,
+                'printed_url' => route('qr-print.printed', $qrPrint),
+            ],
         ]);
     }
 
@@ -162,10 +192,21 @@ class QrPrintController extends Controller
             404
         );
 
-        return view('qr-print.document', compact(
-            'qrPrint',
-            'document'
-        ));
+        return Inertia::render('qr-print/document', [
+            'qrPrint' => [
+                'title' => $qrPrint->title,
+            ],
+            'document' => [
+                'id' => $document->id,
+                'original_name' => $document->original_name,
+                'mime_type' => $document->mime_type,
+                'file_url' => Storage::disk($document->disk)->url($document->path),
+            ],
+            'create_job_url' => route('qr-print.document.create-job', [
+                'token' => $qrPrint->print_token,
+                'document' => $document->id,
+            ]),
+        ]);
     }
 
     public function printDocument(string $token, PrintDocument $document)
