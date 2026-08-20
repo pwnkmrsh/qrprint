@@ -43,6 +43,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 require __DIR__ . '/settings.php';
 require __DIR__ . '/auth.php';
 
+Route::get('/s/{token}', [QrPrintController::class, 'shop'])->name('customer.shop');
+Route::get('/s/{token}/upload', [QrPrintController::class, 'customerUpload'])->name('customer.upload');
+Route::post('/s/{token}/upload', [QrPrintController::class, 'customerStoreUpload'])->name('customer.upload.store');
+Route::get('/s/{token}/configure', [QrPrintController::class, 'customerConfigure'])->name('customer.configure');
+Route::post('/s/{token}/estimate', [QrPrintController::class, 'estimate'])->name('customer.estimate');
+
 Route::get(
     '/print/{token}',
     [QrPrintController::class, 'print']

@@ -16,6 +16,7 @@ use Inertia\Inertia;
 
 class QrPrintController extends Controller
 {
+    private const PRICING = ['A4' => ['bw' => 2, 'color' => 10], 'A3' => ['bw' => 5, 'color' => 20], 'Letter' => ['bw' => 2, 'color' => 10], 'Legal' => ['bw' => 3, 'color' => 12]];
     /**
      * QR Print dashboard
      */
@@ -28,7 +29,7 @@ class QrPrintController extends Controller
             'is_active' => $qrPrint->is_active,
             'created_at' => $qrPrint->created_at?->toDateTimeString(),
             'qr_url' => route('qr-print.qr', $qrPrint),
-            'print_url' => route('qr-print.print', $qrPrint->print_token),
+            'print_url' => route('customer.shop', $qrPrint->print_token),
         ]);
 
         return Inertia::render('qr-print/index', compact('prints'));
@@ -63,7 +64,7 @@ class QrPrintController extends Controller
     {
         abort_unless($qrPrint->is_active, 404);
 
-        $url = route('qr-print.print', [
+        $url = route('customer.shop', [
             'token' => $qrPrint->print_token,
         ]);
 
@@ -103,6 +104,55 @@ class QrPrintController extends Controller
                 'upload_url' => route('qr-print.upload', $qrPrint->print_token),
             ],
         ]);
+    }
+
+    public function shop(string $token)
+    {
+        $qrPrint = $this->findActivePrint($token);
+        return Inertia::render('customer/shop', ['shop' => ['name' => $qrPrint->title, 'slug' => $token, 'upload_url' => route('customer.upload', $token)]]);
+    }
+
+    public function customerUpload(string $token)
+    {
+        $qrPrint = $this->findActivePrint($token);
+        return Inertia::render('customer/upload', ['shop' => ['name' => $qrPrint->title, 'slug' => $token, 'upload_url' => route('customer.upload.store', $token)], 'limits' => ['max_files' => 5, 'max_file_size_mb' => 10]]);
+    }
+
+    public function customerStoreUpload(Request $request, string $token)
+    {
+        $qrPrint = $this->findActivePrint($token);
+        $validated = $request->validate(['documents' => ['required', 'array', 'min:1', 'max:5'], 'documents.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240']]);
+        $ids = collect($validated['documents'])->map(function ($file) use ($qrPrint) {
+            $storedName = $file->hashName();
+            $path = $file->storeAs('print-documents/' . $qrPrint->uuid, $storedName, 'public');
+            return PrintDocument::create(['qr_print_id' => $qrPrint->id, 'original_name' => $file->getClientOriginalName(), 'stored_name' => $storedName, 'mime_type' => $file->getMimeType(), 'file_size' => $file->getSize(), 'disk' => 'public', 'path' => $path])->id;
+        });
+        return redirect()->route('customer.configure', ['token' => $token, 'documents' => $ids->implode(',')]);
+    }
+
+    public function customerConfigure(Request $request, string $token)
+    {
+        $qrPrint = $this->findActivePrint($token);
+        $ids = collect(explode(',', (string) $request->query('documents')))->filter(fn ($id) => ctype_digit($id))->map(fn ($id) => (int) $id);
+        abort_if($ids->isEmpty(), 404);
+        $documents = PrintDocument::where('qr_print_id', $qrPrint->id)->whereIn('id', $ids)->get();
+        abort_unless($documents->count() === $ids->count(), 404);
+        return Inertia::render('customer/configure', ['shop' => ['name' => $qrPrint->title, 'slug' => $token], 'documents' => $documents->map(fn (PrintDocument $document) => ['id' => $document->id, 'name' => $document->original_name, 'size' => $document->file_size, 'pages' => 1])->values(), 'estimate_url' => route('customer.estimate', $token)]);
+    }
+
+    public function estimate(Request $request, string $token)
+    {
+        $qrPrint = $this->findActivePrint($token);
+        $data = $request->validate(['documents' => ['required', 'array', 'min:1', 'max:5'], 'documents.*' => ['integer'], 'paper_size' => ['required', 'in:A4,A3,Letter,Legal'], 'color_mode' => ['required', 'in:bw,color'], 'copies' => ['required', 'integer', 'min:1', 'max:99'], 'duplex' => ['required', 'boolean'], 'orientation' => ['required', 'in:portrait,landscape']]);
+        $count = PrintDocument::where('qr_print_id', $qrPrint->id)->whereIn('id', $data['documents'])->count();
+        abort_unless($count === count($data['documents']), 404);
+        $rate = self::PRICING[$data['paper_size']][$data['color_mode']];
+        return response()->json(['success' => true, 'estimate' => ['pages' => $count, 'rate' => $rate, 'subtotal' => $count * $data['copies'] * $rate]]);
+    }
+
+    private function findActivePrint(string $token): QrPrint
+    {
+        return QrPrint::where('print_token', $token)->where('is_active', true)->firstOrFail();
     }
 
     /**
