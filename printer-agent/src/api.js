@@ -38,8 +38,20 @@ async function failJob(jobId, error) {
     );
 }
 
+async function reportCapabilities(capabilities) {
+    try {
+        await client.post(
+            `/api/print-agent/capabilities`,
+            capabilities
+        );
+    } catch (e) {
+        // silent
+    }
+}
+
 module.exports = {
     getJobs,
     completeJob,
     failJob,
+    reportCapabilities,
 };

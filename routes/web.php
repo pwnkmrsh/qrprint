@@ -48,11 +48,17 @@ Route::get('/s/{token}/upload', [QrPrintController::class, 'customerUpload'])->n
 Route::post('/s/{token}/upload', [QrPrintController::class, 'customerStoreUpload'])->name('customer.upload.store');
 Route::get('/s/{token}/configure', [QrPrintController::class, 'customerConfigure'])->name('customer.configure');
 Route::post('/s/{token}/estimate', [QrPrintController::class, 'estimate'])->name('customer.estimate');
+Route::get('/s/{token}/payment', [QrPrintController::class, 'customerPayment'])->name('customer.payment');
+Route::post('/s/{token}/checkout', [QrPrintController::class, 'customerCheckout'])->name('customer.checkout');
+Route::get('/s/{token}/status/{job}', [QrPrintController::class, 'customerStatus'])->name('customer.status');
+Route::get('/s/{token}/job-status/{job}', [QrPrintController::class, 'customerJobStatus'])->name('customer.job-status');
 
-Route::get(
-    '/print/{token}',
-    [QrPrintController::class, 'print']
-)->name('qr-print.print');
+Route::get('/print/{token}', [QrPrintController::class, 'print'])->name('qr-print.print');
+Route::post('/print/{token}/upload-multi', [QrPrintController::class, 'uploadMulti'])->name('qr-print.upload-multi');
+Route::post('/print/{token}/session/create', [QrPrintController::class, 'createSession'])->name('qr-print.session.create');
+Route::get('/print/{token}/session/{session}', [QrPrintController::class, 'sessionStatus'])->name('qr-print.session.status');
+Route::get('/print/{token}/session/{session}/api', [QrPrintController::class, 'sessionStatusApi'])->name('qr-print.session.api');
+Route::post('/print/{token}/job/retry', [QrPrintController::class, 'retryJob'])->name('qr-print.job.retry');
 
 Route::get(
     '/print/{token}/content',
@@ -73,7 +79,7 @@ Route::get(
     '/print/{token}/document/{document}',
     [QrPrintController::class, 'document']
 )->name('qr-print.document');
- 
+
 
 Route::prefix('print-agent')->group(function () {
 

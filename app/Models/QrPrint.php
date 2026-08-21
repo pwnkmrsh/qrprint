@@ -37,4 +37,9 @@ class QrPrint extends Model
     {
         return $this->hasMany(PrintDocument::class);
     }
+
+    public function sessions()
+    {
+        return $this->hasMany(PrintSession::class);
+    }
 }

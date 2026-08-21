@@ -30,14 +30,13 @@ Route::prefix('print-agent')->group(function () {
         'file'
     ])->name('print-agent.file');
 
-    Route::get(
-    '/print-agent/jobs/{job}/status',
-    [PrintAgentController::class, 'status']
-);
+    Route::get('/jobs/{job}/status', [
+        PrintAgentController::class,
+        'status'
+    ])->name('print-agent.job.status');
 
-Route::post(
-    '/print/{token}/document/{document}/create-job',
-    [PrintAgentController::class, 'createJob']
-)->name('qr-print.document.create-job');
-
+    Route::post('/capabilities', [
+        PrintAgentController::class,
+        'capabilities'
+    ])->name('print-agent.capabilities');
 });

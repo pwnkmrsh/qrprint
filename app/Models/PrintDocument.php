@@ -14,6 +14,9 @@ class PrintDocument extends Model
         'file_size',
         'disk',
         'path',
+        'file_type',
+        'metadata',
+        'status',
         'print_count',
         'last_printed_at',
     ];
@@ -21,6 +24,7 @@ class PrintDocument extends Model
     protected function casts(): array
     {
         return [
+            'metadata' => 'array',
             'last_printed_at' => 'datetime',
         ];
     }
@@ -28,5 +32,10 @@ class PrintDocument extends Model
     public function qrPrint()
     {
         return $this->belongsTo(QrPrint::class);
+    }
+
+    public function jobs()
+    {
+        return $this->hasMany(PrintJob::class);
     }
 }

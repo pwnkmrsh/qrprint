@@ -8,6 +8,7 @@ const {
     getJobs,
     completeJob,
     failJob,
+    reportCapabilities,
 } = require("./api");
 
 const {
@@ -40,7 +41,6 @@ if (!fs.existsSync(downloadDirectory)) {
 }
 
 async function downloadFile(url, filename) {
-
     const filePath = path.join(
         downloadDirectory,
         filename
@@ -49,8 +49,7 @@ async function downloadFile(url, filename) {
     const response = await axios.get(url, {
         responseType: "arraybuffer",
         headers: {
-            Authorization:
-                `Bearer ${config.agentToken}`,
+            Authorization: `Bearer ${config.agentToken}`,
         },
     });
 
@@ -63,35 +62,48 @@ async function downloadFile(url, filename) {
 }
 
 async function processJob(job) {
-
     console.log(
-        `Processing print job: ${job.uuid}`
+        `----------------------------------------\nProcessing print job: #${job.id} (${job.uuid})`
     );
+    console.log(
+        `File: ${job.original_name} [${job.file_type || "pdf"}]`
+    );
+    console.log(
+        `Settings: ${job.copies}x | ${job.color_mode?.toUpperCase() || "BW"} | ${job.paper_size || "A4"} | ${job.orientation || "auto"}`
+    );
+    if (job.selected_sheets && job.selected_sheets.length > 0) {
+        console.log(`Excel Worksheets: [${job.selected_sheets.join(", ")}]`);
+    }
 
     try {
-
         const extension = path.extname(job.original_name || "");
-        const filename = `job-${job.id}${extension || ".pdf"}`;
+        const filename = `job-${job.id}-${Date.now()}${extension || ".pdf"}`;
 
         const filePath = await downloadFile(
             job.file_url,
             filename
         );
 
-        await printFile(filePath);
+        // Execute print with full per-job configuration
+        await printFile(filePath, job);
 
         await completeJob(job.id);
 
         console.log(
-            `✓ Printed: ${job.uuid}`
+            `✓ Successfully Printed: #${job.id} (${job.uuid})`
         );
 
-        fs.unlinkSync(filePath);
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        } catch (cleanupErr) {
+            // silent cleanup error
+        }
 
     } catch (error) {
-
         console.error(
-            `✗ Print failed: ${job.uuid}`,
+            `✗ Print failed for job #${job.id}:`,
             error.message
         );
 
@@ -103,9 +115,7 @@ async function processJob(job) {
 }
 
 async function poll() {
-
     try {
-
         const jobs = await getJobs();
 
         for (const job of jobs) {
@@ -113,12 +123,10 @@ async function poll() {
         }
 
     } catch (error) {
-
         console.error(
             "Agent connection error:",
             describeError(error)
         );
-
     }
 
     setTimeout(
@@ -127,32 +135,25 @@ async function poll() {
     );
 }
 
-console.log(
-    "================================="
-);
+console.log("=================================");
+console.log(" MynaTech Local Printer Agent");
+console.log("=================================");
+console.log(`Server: ${config.laravelUrl}`);
+console.log(`Agent: ${config.agentId}`);
+console.log(`Printer: ${config.printerName}`);
+console.log("Multi-file Excel/PDF/Image workflow active");
+console.log("Agent started...\n");
 
-console.log(
-    " MynaTech Local Printer Agent"
-);
-
-console.log(
-    "================================="
-);
-
-console.log(
-    `Server: ${config.laravelUrl}`
-);
-
-console.log(
-    `Agent: ${config.agentId}`
-);
-
-console.log(
-    `Printer: ${config.printerName}`
-);
-
-console.log(
-    "Agent started..."
-);
+// Announce capabilities
+reportCapabilities({
+    agent_id: config.agentId,
+    printer_name: config.printerName,
+    capabilities: {
+        color: true,
+        duplex: true,
+        paper_sizes: ["A4", "A3", "Letter", "Legal"],
+        excel_sheet_isolation: true,
+    },
+});
 
 poll();
