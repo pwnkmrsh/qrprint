@@ -35,6 +35,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('dashboard/toggle-qr', [DashboardController::class, 'toggleQr'])->name('dashboard.toggle-qr');
     Route::post('dashboard/update-profile', [DashboardController::class, 'updateProfile'])->name('dashboard.update-profile');
     Route::post('dashboard/job/{job}/retry', [DashboardController::class, 'retryJob'])->name('dashboard.job.retry');
+    Route::post('dashboard/session/{session}/collect-payment', [DashboardController::class, 'collectPayment'])->name('dashboard.session.collect-payment');
     Route::post('dashboard/job/{job}/cancel', [DashboardController::class, 'cancelJob'])->name('dashboard.job.cancel');
     Route::post('dashboard/job/{job}/close', [DashboardController::class, 'closeJob'])->name('dashboard.job.close');
     Route::get('dashboard/qr/print', [DashboardController::class, 'printPoster'])->name('dashboard.qr.print');

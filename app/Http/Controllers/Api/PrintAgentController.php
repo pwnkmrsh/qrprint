@@ -33,8 +33,17 @@ class PrintAgentController extends Controller
                 'started_at' => now(),
             ]);
 
-            if ($job->session && $job->session->status !== 'printing') {
-                $job->session->update(['status' => 'printing']);
+            if ($job->session) {
+                $sessionUpdate = [];
+                if ($job->session->status !== 'printing') {
+                    $sessionUpdate['status'] = 'printing';
+                }
+                if ($job->session->print_status !== 'printing') {
+                    $sessionUpdate['print_status'] = 'printing';
+                }
+                if (!empty($sessionUpdate)) {
+                    $job->session->update($sessionUpdate);
+                }
             }
         }
 
@@ -87,6 +96,7 @@ class PrintAgentController extends Controller
                     'completed_files' => $completed,
                     'failed_files' => $failed,
                     'status' => $sessionStatus,
+                    'print_status' => $sessionStatus,
                 ]);
             }
         }
@@ -118,6 +128,7 @@ class PrintAgentController extends Controller
                     'completed_files' => $completed,
                     'failed_files' => $failed,
                     'status' => $sessionStatus,
+                    'print_status' => $sessionStatus,
                 ]);
             }
         }

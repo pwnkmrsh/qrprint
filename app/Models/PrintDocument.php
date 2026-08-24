@@ -38,4 +38,9 @@ class PrintDocument extends Model
     {
         return $this->hasMany(PrintJob::class);
     }
+
+    public function getPageCountAttribute(): int
+    {
+        return $this->metadata['page_count'] ?? 1;
+    }
 }

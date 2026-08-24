@@ -136,7 +136,10 @@ class PrintJobHistoryController extends Controller
             if ($job->print_session_id) {
                 $session = PrintSession::find($job->print_session_id);
                 if ($session && in_array($session->status, ['failed', 'partial_failed', 'cancelled', 'completed'])) {
-                    $session->update(['status' => 'printing']);
+                    $session->update([
+                        'status' => 'printing',
+                        'print_status' => 'printing',
+                    ]);
                 }
             }
         });

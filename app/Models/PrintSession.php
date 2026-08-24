@@ -16,9 +16,19 @@ class PrintSession extends Model
         'status',
         'payment_method',
         'payment_status',
+        'print_status',
         'total_amount',
         'currency',
+        'paid_at',
+        'paid_by',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'paid_at' => 'datetime',
+        ];
+    }
 
     protected static function booted(): void
     {
@@ -37,5 +47,30 @@ class PrintSession extends Model
     public function jobs()
     {
         return $this->hasMany(PrintJob::class, 'print_session_id');
+    }
+
+    public function paidBy()
+    {
+        return $this->belongsTo(User::class, 'paid_by');
+    }
+
+    public function getFormattedOrderIdAttribute(): string
+    {
+        return sprintf('Q2P-%06d', $this->id);
+    }
+
+    public function getTotalPagesAttribute(): int
+    {
+        return $this->jobs->sum(function ($job) {
+            $pages = 1;
+            if ($job->document) {
+                if ($job->document->file_type === 'excel' && !empty($job->selected_sheets)) {
+                    $pages = count($job->selected_sheets);
+                } else {
+                    $pages = $job->document->metadata['page_count'] ?? 1;
+                }
+            }
+            return $pages * $job->copies;
+        });
     }
 }

@@ -19,7 +19,11 @@ import {
     Users,
     Edit2,
     AlertCircle,
-    FileText
+    FileText,
+    Banknote,
+    Eye,
+    Check,
+    ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +56,43 @@ interface Job {
     error_message: string | null;
     created_at: string;
     completed_at: string | null;
+}
+
+interface PendingPayment {
+    id: number;
+    uuid: string;
+    order_id: string;
+    documents_count: number;
+    pages_count: number;
+    amount: number;
+    currency: string;
+    payment_status: string;
+    created_at: string;
+    jobs?: {
+        id: number;
+        document_name: string;
+        file_type: string;
+        copies: number;
+        orientation: string;
+        color_mode: string;
+        paper_size: string;
+        duplex: string;
+        amount: number;
+    }[];
+}
+
+interface FailedSession {
+    id: number;
+    uuid: string;
+    order_id: string;
+    completed_count: number;
+    failed_count: number;
+    reason: string;
+    failed_jobs: {
+        id: number;
+        uuid: string;
+        document_name: string;
+    }[];
 }
 
 interface DashboardProps {
@@ -93,9 +134,11 @@ interface DashboardProps {
         last_page: number;
     };
     canManageStaff: boolean;
+    pendingPayments: PendingPayment[];
+    failedSessions: FailedSession[];
 }
 
-export default function Dashboard({ qrPrint, printer, stats, jobs, canManageStaff }: DashboardProps) {
+export default function Dashboard({ qrPrint, printer, stats, jobs, canManageStaff, pendingPayments, failedSessions }: DashboardProps) {
     const { auth } = usePage().props as any;
     
     // Toggle QR Confirmation Modal
@@ -107,6 +150,46 @@ export default function Dashboard({ qrPrint, printer, stats, jobs, canManageStaf
     
     // Retry status
     const [retryingJobId, setRetryingJobId] = useState<number | null>(null);
+
+    // View Details Modal for Counter Payments
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [viewingPayment, setViewingPayment] = useState<PendingPayment | null>(null);
+
+    // Collect Payment Modal Flow
+    const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
+    const [collectingPayment, setCollectingPayment] = useState<PendingPayment | null>(null);
+    const [paymentStep, setPaymentStep] = useState<1 | 2>(1);
+    const [collectPaymentMethod, setCollectPaymentMethod] = useState<'cash' | 'upi'>('cash');
+    const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+
+    const handleViewPaymentDetails = (payment: PendingPayment) => {
+        setViewingPayment(payment);
+        setIsViewModalOpen(true);
+    };
+
+    const handleStartCollectPayment = (payment: PendingPayment) => {
+        setCollectingPayment(payment);
+        setPaymentStep(1);
+        setCollectPaymentMethod('cash');
+        setIsCollectModalOpen(true);
+    };
+
+    const handleConfirmPayment = () => {
+        if (!collectingPayment) return;
+        setIsSubmittingPayment(true);
+        router.post(route('dashboard.session.collect-payment', collectingPayment.id), {
+            payment_method: collectPaymentMethod,
+        }, {
+            onSuccess: () => {
+                setIsCollectModalOpen(false);
+                setCollectingPayment(null);
+                setPaymentStep(1);
+            },
+            onFinish: () => {
+                setIsSubmittingPayment(false);
+            }
+        });
+    };
 
     // Profile Form
     const profileForm = useForm({
@@ -234,77 +317,155 @@ export default function Dashboard({ qrPrint, printer, stats, jobs, canManageStaf
                 {/* ── Main Layout Split Grid ── */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                    {/* ── Column 1: Main QR Code Card ── */}
-                    <Card className="lg:col-span-1 border border-border shadow-xs rounded-2xl flex flex-col justify-between overflow-hidden">
-                        <CardHeader className="border-b bg-muted/20 pb-4 text-center">
-                            <CardTitle className="text-sm font-black tracking-wider uppercase text-slate-500 dark:text-muted-foreground">
-                                Your QR Print Setu QR
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                                Customers scan this QR to upload and print instantly
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col items-center justify-center p-6 space-y-6 flex-1">
-                            {/* QR Code Graphic Frame */}
-                            <div className="relative p-4 border-2 border-slate-200 dark:border-border rounded-2xl bg-white shadow-inner flex items-center justify-center max-w-[220px] aspect-square">
-                                <img 
-                                    src={qrPrint.qr_url} 
-                                    alt="Print Point QR" 
-                                    className="w-full h-full object-contain"
-                                />
-                                <div className="absolute inset-0 m-auto h-10 w-10 rounded-lg bg-slate-900 text-white flex items-center justify-center border-2 border-white shadow-sm">
-                                    <Printer className="h-4.5 w-4.5" />
+                    {/* ── Column 1: Main QR Code Card & Pending Payments ── */}
+                    <div className="lg:col-span-1 flex flex-col gap-6">
+                        <Card className="border border-border shadow-xs rounded-2xl flex flex-col justify-between overflow-hidden">
+                            <CardHeader className="border-b bg-muted/20 pb-4 text-center">
+                                <CardTitle className="text-sm font-black tracking-wider uppercase text-slate-500 dark:text-muted-foreground">
+                                    Your QR Print Setu QR
+                                </CardTitle>
+                                <CardDescription className="text-xs">
+                                    Customers scan this QR to upload and print instantly
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col items-center justify-center p-6 space-y-6 flex-1">
+                                {/* QR Code Graphic Frame */}
+                                <div className="relative p-4 border-2 border-slate-200 dark:border-border rounded-2xl bg-white shadow-inner flex items-center justify-center max-w-[220px] aspect-square">
+                                    <img 
+                                        src={qrPrint.qr_url} 
+                                        alt="Print Point QR" 
+                                        className="w-full h-full object-contain"
+                                    />
+                                    <div className="absolute inset-0 m-auto h-10 w-10 rounded-lg bg-slate-900 text-white flex items-center justify-center border-2 border-white shadow-sm">
+                                        <Printer className="h-4.5 w-4.5" />
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="text-center space-y-1">
-                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Shop Code</span>
-                                <h3 className="text-xl font-black font-mono tracking-widest text-foreground">
-                                    {qrPrint.print_token}
-                                </h3>
-                                <p className="text-xs text-muted-foreground max-w-[220px]">
-                                    Customers scan to access your print portal directly.
-                                </p>
-                            </div>
+                                <div className="text-center space-y-1">
+                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Shop Code</span>
+                                    <h3 className="text-xl font-black font-mono tracking-widest text-foreground">
+                                        {qrPrint.print_token}
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground max-w-[220px]">
+                                        Customers scan to access your print portal directly.
+                                    </p>
+                                </div>
 
-                            {/* Action Buttons Row */}
-                            <div className="grid grid-cols-2 gap-2 w-full pt-2">
-                                <Button 
-                                    asChild 
-                                    variant="outline" 
-                                    size="sm" 
-                                    className="h-10 text-xs font-bold rounded-lg border-border gap-1.5"
+                                {/* Action Buttons Row */}
+                                <div className="grid grid-cols-2 gap-2 w-full pt-2">
+                                    <Button 
+                                        asChild 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-10 text-xs font-bold rounded-lg border-border gap-1.5"
+                                    >
+                                        <a href={route('dashboard.qr.print')} target="_blank" rel="noreferrer">
+                                            <Printer className="h-4 w-4" />
+                                            <span>Print Poster</span>
+                                        </a>
+                                    </Button>
+                                    <Button 
+                                        asChild 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-10 text-xs font-bold rounded-lg border-border gap-1.5"
+                                    >
+                                        <a href={qrPrint.qr_url} download={`qr-print-${qrPrint.print_token}.svg`}>
+                                            <Download className="h-4 w-4" />
+                                            <span>Download QR</span>
+                                        </a>
+                                    </Button>
+                                </div>
+                            </CardContent>
+
+                            {/* Bottom Activate/Deactivate Button */}
+                            <div className="border-t bg-muted/10 p-4">
+                                <Button
+                                    onClick={() => setIsConfirmToggleOpen(true)}
+                                    variant={qrPrint.is_active ? 'destructive' : 'default'}
+                                    className="w-full font-bold h-10 rounded-lg transition-transform"
                                 >
-                                    <a href={route('dashboard.qr.print')} target="_blank" rel="noreferrer">
-                                        <Printer className="h-4 w-4" />
-                                        <span>Print Poster</span>
-                                    </a>
-                                </Button>
-                                <Button 
-                                    asChild 
-                                    variant="outline" 
-                                    size="sm" 
-                                    className="h-10 text-xs font-bold rounded-lg border-border gap-1.5"
-                                >
-                                    <a href={qrPrint.qr_url} download={`qr-print-${qrPrint.print_token}.svg`}>
-                                        <Download className="h-4 w-4" />
-                                        <span>Download QR</span>
-                                    </a>
+                                    {qrPrint.is_active ? 'Deactivate QR' : 'Activate QR'}
                                 </Button>
                             </div>
-                        </CardContent>
+                        </Card>
 
-                        {/* Bottom Activate/Deactivate Button */}
-                        <div className="border-t bg-muted/10 p-4">
-                            <Button
-                                onClick={() => setIsConfirmToggleOpen(true)}
-                                variant={qrPrint.is_active ? 'destructive' : 'default'}
-                                className="w-full font-bold h-10 rounded-lg transition-transform"
-                            >
-                                {qrPrint.is_active ? 'Deactivate QR' : 'Activate QR'}
-                            </Button>
-                        </div>
-                    </Card>
+                        {/* ── Payments - Pending Payments ── */}
+                        <Card className="border border-border shadow-xs rounded-2xl overflow-hidden">
+                            <CardHeader className="border-b bg-muted/10 pb-3 flex flex-row items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-sm font-black tracking-wider uppercase text-slate-500 flex items-center gap-1.5">
+                                        <Banknote className="h-4 w-4 text-emerald-500" />
+                                        Pending Payments
+                                    </CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Cash or UPI collections at shop counter
+                                    </CardDescription>
+                                </div>
+                                {pendingPayments.length > 0 && (
+                                    <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold text-[10px]">
+                                        {pendingPayments.length} Action Required
+                                    </Badge>
+                                )}
+                            </CardHeader>
+                            <CardContent className="p-4 space-y-4 max-h-[380px] overflow-y-auto">
+                                {pendingPayments.length === 0 ? (
+                                    <div className="py-8 text-center text-xs text-muted-foreground flex flex-col items-center justify-center space-y-2">
+                                        <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                                        <p className="font-semibold text-slate-800 dark:text-slate-200">All payments cleared!</p>
+                                        <p>No print orders are waiting for counter payment.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {pendingPayments.map((payment) => (
+                                            <div key={payment.id} className="p-3.5 border border-border rounded-xl bg-card hover:bg-muted/10 transition-colors flex flex-col gap-3">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="space-y-0.5">
+                                                        <div className="font-extrabold text-sm font-mono tracking-wide text-foreground">
+                                                            {payment.order_id}
+                                                        </div>
+                                                        <div className="flex gap-2 text-[10px] text-muted-foreground font-medium">
+                                                            <span>{payment.documents_count} {payment.documents_count === 1 ? 'Doc' : 'Docs'}</span>
+                                                            <span>·</span>
+                                                            <span>{payment.pages_count} {payment.pages_count === 1 ? 'Page' : 'Pages'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="font-black text-slate-900 dark:text-foreground text-sm">
+                                                            {payment.currency}{payment.amount}
+                                                        </div>
+                                                        <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px] font-bold py-0 px-1 mt-0.5 uppercase tracking-wide">
+                                                            ⏳ Pending
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2 pt-1 border-t border-border/50">
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="xs" 
+                                                        onClick={() => handleViewPaymentDetails(payment)}
+                                                        className="h-8 text-xs font-semibold rounded-lg flex-1 border-border gap-1"
+                                                    >
+                                                        <Eye className="h-3 w-3 text-muted-foreground" />
+                                                        <span>View</span>
+                                                    </Button>
+                                                    <Button 
+                                                        variant="default" 
+                                                        size="xs" 
+                                                        onClick={() => handleStartCollectPayment(payment)}
+                                                        className="h-8 text-xs font-bold rounded-lg flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                                                    >
+                                                        <Check className="h-3.5 w-3.5" />
+                                                        <span>Collect Payment</span>
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
 
                     {/* ── Column 2 & 3: Stats & Printer Status & History ── */}
                     <div className="lg:col-span-2 flex flex-col gap-6">
@@ -333,6 +494,70 @@ export default function Dashboard({ qrPrint, printer, stats, jobs, canManageStaf
                                 <p className="text-[10px] text-muted-foreground mt-1">Overall completed prints</p>
                             </Card>
                         </div>
+
+                        {/* ── Partially Failed Sessions Warning Alerts ── */}
+                        {failedSessions && failedSessions.length > 0 && (
+                            <div className="space-y-4">
+                                {failedSessions.map((session) => (
+                                    <Card key={session.id} className="border-rose-500/30 bg-rose-500/[0.02] shadow-xs rounded-2xl overflow-hidden border">
+                                        <CardHeader className="pb-3 flex flex-row items-center justify-between border-b bg-rose-500/[0.05] border-rose-500/10">
+                                            <div className="flex items-center gap-2">
+                                                <AlertCircle className="h-5 w-5 text-rose-500" />
+                                                <div>
+                                                    <CardTitle className="text-sm font-extrabold tracking-wide uppercase text-rose-600">
+                                                        Partial Printing Failure — {session.order_id}
+                                                    </CardTitle>
+                                                    <CardDescription className="text-xs text-rose-500/80">
+                                                        Some documents in this order failed to print
+                                                    </CardDescription>
+                                                </div>
+                                            </div>
+                                            <Badge className="bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold text-xs uppercase">
+                                                Action Required
+                                            </Badge>
+                                        </CardHeader>
+                                        <CardContent className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                            <div className="space-y-2">
+                                                <div className="flex gap-4 text-xs font-semibold text-slate-700">
+                                                    <span className="flex items-center gap-1 text-emerald-600">
+                                                        <CheckCircle2 className="h-4 w-4 text-emerald-600" /> {session.completed_count} Completed
+                                                    </span>
+                                                    <span className="flex items-center gap-1 text-rose-600">
+                                                        <XCircle className="h-4 w-4 text-rose-600" /> {session.failed_count} Failed
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs">
+                                                    <span className="text-muted-foreground block font-medium uppercase text-[9px] tracking-wider">Reason</span>
+                                                    <span className="font-bold text-slate-800 dark:text-slate-200">{session.reason}</span>
+                                                </div>
+                                                {session.failed_jobs.map((job) => (
+                                                    <p key={job.id} className="text-xs text-muted-foreground font-medium truncate max-w-[320px]">
+                                                        Failed file: <span className="text-slate-700 font-semibold">{job.document_name}</span>
+                                                    </p>
+                                                ))}
+                                            </div>
+                                            <div className="shrink-0 flex flex-col gap-2">
+                                                {session.failed_jobs.map((job) => (
+                                                    <Button
+                                                        key={job.id}
+                                                        onClick={() => handleRetryJob(job.id)}
+                                                        disabled={retryingJobId === job.id}
+                                                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-9 rounded-lg gap-1.5"
+                                                    >
+                                                        {retryingJobId === job.id ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <RefreshCw className="h-4 w-4" />
+                                                        )}
+                                                        <span>Retry Failed Job</span>
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
 
                         {/* ── Printer & Local Agent Status Card ── */}
                         <Card className="border border-border shadow-xs rounded-2xl">
@@ -700,6 +925,203 @@ export default function Dashboard({ qrPrint, printer, stats, jobs, canManageStaf
                                 </Button>
                             </DialogFooter>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* ── View Details Modal ── */}
+                <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+                    <DialogContent className="sm:max-w-md select-none rounded-2xl">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-1.5 text-base font-extrabold">
+                                <FileText className="h-4.5 w-4.5 text-primary" />
+                                Order Details — {viewingPayment?.order_id}
+                            </DialogTitle>
+                            <DialogDescription className="text-xs">
+                                Review documents and print configurations for this session.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {viewingPayment && (
+                            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+                                <div className="space-y-2.5">
+                                    {viewingPayment.jobs?.map((job: any) => (
+                                        <div key={job.id} className="p-3 border border-border rounded-xl bg-muted/20 flex flex-col gap-2">
+                                            <div className="flex justify-between items-start gap-3">
+                                                <span className="font-semibold text-xs text-slate-800 dark:text-slate-200 truncate flex-1" title={job.document_name}>
+                                                    {job.document_name}
+                                                </span>
+                                                <span className="font-bold text-xs text-foreground shrink-0">
+                                                    {viewingPayment.currency}{Number(job.amount || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5 text-[10px]">
+                                                <Badge variant="outline" className="px-1.5 py-0 bg-background text-muted-foreground text-[9px] font-medium border-border/85 uppercase">
+                                                    {job.paper_size}
+                                                </Badge>
+                                                <Badge variant="outline" className="px-1.5 py-0 bg-background text-muted-foreground text-[9px] font-medium border-border/85 uppercase">
+                                                    {job.color_mode === 'color' ? '🎨 Color' : '⬛ BW'}
+                                                </Badge>
+                                                <Badge variant="outline" className="px-1.5 py-0 bg-background text-muted-foreground text-[9px] font-medium border-border/85 uppercase">
+                                                    {job.orientation}
+                                                </Badge>
+                                                {job.duplex !== 'off' && (
+                                                    <Badge variant="outline" className="px-1.5 py-0 bg-background text-muted-foreground text-[9px] font-medium border-border/85 uppercase">
+                                                        Duplex
+                                                    </Badge>
+                                                )}
+                                                <Badge variant="secondary" className="px-1.5 py-0 text-foreground text-[9px] font-extrabold">
+                                                    {job.copies}x {job.copies === 1 ? 'Copy' : 'Copies'}
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <DialogFooter className="border-t border-border/50 pt-3 flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setIsViewModalOpen(false)} className="rounded-lg h-9 font-semibold">
+                                Close
+                            </Button>
+                            <Button 
+                                variant="default" 
+                                size="sm" 
+                                onClick={() => {
+                                    setIsViewModalOpen(false);
+                                    handleStartCollectPayment(viewingPayment!);
+                                }} 
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-9 font-bold gap-1"
+                            >
+                                <Check className="h-4 w-4" />
+                                <span>Collect Payment</span>
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* ── Collect Payment Modal ── */}
+                <Dialog open={isCollectModalOpen} onOpenChange={setIsCollectModalOpen}>
+                    <DialogContent className="sm:max-w-md select-none rounded-2xl">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-1.5 text-base font-extrabold">
+                                <Banknote className="h-4.5 w-4.5 text-emerald-500" />
+                                {paymentStep === 1 ? 'Select Payment Method' : 'Confirm Payment'}
+                            </DialogTitle>
+                            <DialogDescription className="text-xs">
+                                {paymentStep === 1 
+                                    ? 'Verify order details and select how the customer is paying.'
+                                    : 'Confirm cash receipt or Counter UPI transfer details before approval.'
+                                }
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {collectingPayment && (
+                            <div className="space-y-4">
+                                {/* Summary strip */}
+                                <div className="p-3 border border-emerald-500/20 bg-emerald-500/5 rounded-xl flex items-center justify-between gap-3">
+                                    <div>
+                                        <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Order Reference</div>
+                                        <div className="font-extrabold text-sm font-mono text-slate-800 dark:text-slate-200">{collectingPayment.order_id}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Total Due</div>
+                                        <div className="font-black text-base text-emerald-600">{collectingPayment.currency}{collectingPayment.amount}</div>
+                                    </div>
+                                </div>
+
+                                {paymentStep === 1 ? (
+                                    <div className="space-y-3 pt-2">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Choose Method:</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCollectPaymentMethod('cash')}
+                                                className={`p-4 border rounded-xl flex flex-col items-center gap-2 cursor-pointer transition-all ${
+                                                    collectPaymentMethod === 'cash' 
+                                                        ? 'border-emerald-600 bg-emerald-500/5 ring-2 ring-emerald-500/20' 
+                                                        : 'border-border bg-card hover:bg-muted/10'
+                                                }`}
+                                            >
+                                                <Banknote className={`h-6 w-6 ${collectPaymentMethod === 'cash' ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+                                                <span className="font-bold text-xs">Cash Payment</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setCollectPaymentMethod('upi')}
+                                                className={`p-4 border rounded-xl flex flex-col items-center gap-2 cursor-pointer transition-all ${
+                                                    collectPaymentMethod === 'upi' 
+                                                        ? 'border-emerald-600 bg-emerald-500/5 ring-2 ring-emerald-500/20' 
+                                                        : 'border-border bg-card hover:bg-muted/10'
+                                                }`}
+                                            >
+                                                <QrCode className={`h-6 w-6 ${collectPaymentMethod === 'upi' ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+                                                <span className="font-bold text-xs">Counter UPI</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 py-1">
+                                        <div className="rounded-xl border border-border p-4 bg-muted/10 space-y-3 text-xs">
+                                            <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                                                <span className="text-muted-foreground font-semibold">Order ID</span>
+                                                <span className="font-bold font-mono">{collectingPayment.order_id}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center pb-2 border-b border-border/50">
+                                                <span className="text-muted-foreground font-semibold">Amount</span>
+                                                <span className="font-black text-slate-900 dark:text-foreground text-sm">{collectingPayment.currency}{collectingPayment.amount}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-muted-foreground font-semibold">Payment Method</span>
+                                                <span className="font-bold text-emerald-600 capitalize">
+                                                    {collectPaymentMethod === 'cash' ? 'Cash' : 'Counter UPI'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <DialogFooter className="border-t border-border/50 pt-3 flex flex-row items-center gap-2 justify-end">
+                            {paymentStep === 1 ? (
+                                <>
+                                    <Button variant="outline" size="sm" onClick={() => setIsCollectModalOpen(false)} className="rounded-lg h-9 font-semibold flex-1 sm:flex-initial">
+                                        Cancel
+                                    </Button>
+                                    <Button 
+                                        type="button"
+                                        variant="default" 
+                                        size="sm" 
+                                        onClick={() => setPaymentStep(2)}
+                                        className="bg-primary hover:bg-primary/95 text-white rounded-lg h-9 font-bold gap-1 flex-1 sm:flex-initial"
+                                    >
+                                        <span>Next</span>
+                                        <ArrowRight className="h-4 w-4" />
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <Button variant="outline" size="sm" onClick={() => setIsCollectModalOpen(false)} disabled={isSubmittingPayment} className="rounded-lg h-9 font-semibold flex-1 sm:flex-initial">
+                                        Cancel
+                                    </Button>
+                                    <Button 
+                                        type="button"
+                                        variant="default" 
+                                        size="sm" 
+                                        onClick={handleConfirmPayment}
+                                        disabled={isSubmittingPayment}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg h-9 font-bold gap-1 flex-1 sm:flex-initial"
+                                    >
+                                        {isSubmittingPayment ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                <span>Processing…</span>
+                                            </>
+                                        ) : (
+                                            <span>Confirm {collectingPayment?.currency}{collectingPayment?.amount} Paid</span>
+                                        )}
+                                    </Button>
+                                </>
+                            )}
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 

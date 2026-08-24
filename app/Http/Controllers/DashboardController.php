@@ -113,6 +113,70 @@ class DashboardController extends Controller
         // 5. Staff and Role permission checks
         $canManageStaff = $user->can('access-users-module') || $user->roles->first()?->name === 'super-admin' || $user->roles->first()?->name === 'admin';
 
+        // 6. Fetch pending payments for shop counter
+        $pendingPayments = PrintSession::with(['jobs.document'])
+            ->where('qr_print_id', $qrPrint->id)
+            ->where('payment_method', 'counter')
+            ->where('payment_status', 'pending')
+            ->latest()
+            ->get()
+            ->map(function ($sess) {
+                return [
+                    'id' => $sess->id,
+                    'uuid' => $sess->uuid,
+                    'order_id' => $sess->formatted_order_id,
+                    'documents_count' => $sess->total_files,
+                    'pages_count' => $sess->total_pages,
+                    'amount' => (float)$sess->total_amount,
+                    'currency' => $sess->currency ?: '₹',
+                    'payment_status' => $sess->payment_status,
+                    'created_at' => $sess->created_at?->toDateTimeString(),
+                    'jobs' => $sess->jobs->map(function ($job) {
+                        return [
+                            'id' => $job->id,
+                            'document_name' => $job->document?->original_name ?? 'Unknown',
+                            'file_type' => $job->document?->file_type ?? 'other',
+                            'copies' => $job->copies,
+                            'orientation' => $job->orientation,
+                            'color_mode' => $job->color_mode,
+                            'paper_size' => $job->paper_size,
+                            'duplex' => $job->duplex,
+                            'amount' => (float)$job->amount,
+                        ];
+                    }),
+                ];
+            });
+
+        // 7. Fetch partially failed print sessions for shop dashboard alerts
+        $failedSessions = PrintSession::with(['jobs.document'])
+            ->where('qr_print_id', $qrPrint->id)
+            ->where(function ($q) {
+                $q->where('status', 'partial_failed')
+                  ->orWhere('print_status', 'partial_failed');
+            })
+            ->latest()
+            ->get()
+            ->map(function ($sess) {
+                $failedJob = $sess->jobs->where('status', 'failed')->first();
+                $reason = $failedJob && $failedJob->error_message ? $failedJob->error_message : 'Printer error';
+
+                return [
+                    'id' => $sess->id,
+                    'uuid' => $sess->uuid,
+                    'order_id' => $sess->formatted_order_id,
+                    'completed_count' => $sess->jobs->where('status', 'printed')->count(),
+                    'failed_count' => $sess->jobs->where('status', 'failed')->count(),
+                    'reason' => $reason,
+                    'failed_jobs' => $sess->jobs->where('status', 'failed')->map(function ($job) {
+                        return [
+                            'id' => $job->id,
+                            'uuid' => $job->uuid,
+                            'document_name' => $job->document?->original_name ?? 'Unknown',
+                        ];
+                    })->values()->toArray(),
+                ];
+            });
+
         return Inertia::render('dashboard', [
             'qrPrint' => [
                 'id' => $qrPrint->id,
@@ -143,7 +207,43 @@ class DashboardController extends Controller
             ],
             'jobs' => $jobs,
             'canManageStaff' => $canManageStaff,
+            'pendingPayments' => $pendingPayments,
+            'failedSessions' => $failedSessions,
         ]);
+    }
+
+    /**
+     * Collect payment for a pending counter session.
+     */
+    public function collectPayment(Request $request, PrintSession $session)
+    {
+        $user = Auth::user();
+        $qrPrint = QrPrint::where('user_id', $user->id)->firstOrFail();
+
+        // Ensure session belongs to this merchant's shop
+        abort_unless($session->qr_print_id === $qrPrint->id, 403);
+        abort_unless($session->payment_status === 'pending', 400, 'Session payment is not pending.');
+
+        $validated = $request->validate([
+            'payment_method' => ['required', 'string', 'in:cash,upi,card,counter'],
+        ]);
+
+        // Update the print session on counter payment validation
+        $session->update([
+            'payment_status' => 'paid',
+            'payment_method' => $validated['payment_method'],
+            'paid_at' => now(),
+            'paid_by' => $user->id,
+            'print_status' => 'ready_to_print',
+        ]);
+
+        // Put all pending_payment jobs of this session into the print queue (pending) and update payment method
+        $session->jobs()->where('status', 'pending_payment')->update([
+            'status' => 'pending',
+            'payment_method' => $validated['payment_method'],
+        ]);
+
+        return redirect()->back()->with('success', "Payment of {$session->currency}{$session->total_amount} collected successfully.");
     }
 
     /**
@@ -208,7 +308,10 @@ class DashboardController extends Controller
         if ($job->print_session_id) {
             $session = PrintSession::find($job->print_session_id);
             if ($session && in_array($session->status, ['failed', 'partial_failed'])) {
-                $session->update(['status' => 'printing']);
+                $session->update([
+                    'status' => 'printing',
+                    'print_status' => 'printing',
+                ]);
             }
         }
 

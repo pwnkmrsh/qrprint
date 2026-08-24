@@ -51,6 +51,7 @@ export interface SessionJob {
 
 interface SessionData {
     uuid: string;
+    order_id?: string;
     status: 'ready' | 'printing' | 'completed' | 'partial_failed' | 'failed' | 'cancelled' | string;
     payment_method?: string;
     payment_status?: string;
@@ -181,7 +182,7 @@ export default function SessionStatus({
 
     return (
         <>
-            <Head title={`Print Status | #${session.uuid.slice(0, 8).toUpperCase()}`} />
+            <Head title={`Print Status | ${session.order_id || session.uuid.slice(0, 8).toUpperCase()}`} />
             <main className="bg-gradient-to-b from-background via-muted/20 to-muted/40 min-h-screen py-8 px-4 sm:px-6">
                 <div className="mx-auto max-w-2xl space-y-6">
                     {/* Header with Shop Details */}
@@ -202,27 +203,38 @@ export default function SessionStatus({
                             </div>
                         )}
                         <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                            {session.status === 'completed'
-                                ? 'Printing Completed Successfully!'
-                                : session.status === 'printing'
-                                  ? 'Printing in Progress…'
-                                  : session.status === 'partial_failed'
-                                    ? 'Printing Finished with Alerts'
-                                    : 'Print Order Dispatched'}
+                            {session.payment_status === 'pending' && isCounter
+                                ? '⏳ Payment Pending'
+                                : session.status === 'completed'
+                                  ? 'Printing Completed Successfully!'
+                                  : session.status === 'printing'
+                                    ? 'Printing in Progress…'
+                                    : session.status === 'partial_failed'
+                                      ? 'Printing Finished with Alerts'
+                                      : 'Print Order Dispatched'
+                            }
                         </h1>
                         <p className="text-muted-foreground text-xs sm:text-sm">
-                            {qrPrint.title} · Order Token: <span className="font-mono font-bold text-foreground">#{session.uuid.slice(0, 8).toUpperCase()}</span>
+                            {qrPrint.title} · Order ID: <span className="font-mono font-bold text-foreground">{session.order_id || session.uuid.slice(0, 8).toUpperCase()}</span>
                         </p>
                     </div>
 
                     {/* Order & Payment Summary Box */}
-                    <Card className="shadow-xs border bg-primary/5 border-primary/20 overflow-hidden">
+                    <Card className={`shadow-xs border overflow-hidden ${
+                        session.payment_status === 'pending' && isCounter 
+                            ? 'bg-amber-500/5 border-amber-500/20' 
+                            : 'bg-primary/5 border-primary/20'
+                    }`}>
                         <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                    {isCounter ? (
+                                    {session.payment_status === 'pending' && isCounter ? (
+                                        <Badge className="bg-amber-500 hover:bg-amber-600 text-white gap-1 text-xs">
+                                            <Clock className="size-3" /> ⏳ Payment Pending
+                                        </Badge>
+                                    ) : isCounter ? (
                                         <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white gap-1 text-xs">
-                                            <Store className="size-3" /> Pay at Counter (Cash / QR)
+                                            <Store className="size-3" /> Paid at Counter (Cash / UPI)
                                         </Badge>
                                     ) : (
                                         <Badge className="bg-blue-600 hover:bg-blue-600 text-white gap-1 text-xs">
@@ -234,9 +246,12 @@ export default function SessionStatus({
                                     </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    {isCounter
-                                        ? `Please show Token #${session.uuid.slice(0, 8).toUpperCase()} to the cashier and pay ${sym}${totalAmount} when collecting your prints.`
-                                        : `Digital payment verified for ${sym}${totalAmount}. Your printout is spooling directly.`}
+                                    {session.payment_status === 'pending' && isCounter
+                                        ? 'Show this Order ID at shop counter.'
+                                        : isCounter
+                                          ? `Payment verified at counter. Your printout is spooling directly.`
+                                          : `Digital payment verified for ${sym}${totalAmount}. Your printout is spooling directly.`
+                                    }
                                 </p>
                             </div>
                             <div className="text-right sm:text-right shrink-0">
