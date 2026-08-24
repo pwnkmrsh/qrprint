@@ -87,6 +87,104 @@ function runPowerShellScript(psScript) {
 }
 
 /**
+ * Print Image file (.jpg, .jpeg, .png, .bmp, .gif, .webp, .tiff)
+ * using .NET System.Drawing.Printing.PrintDocument (Native Windows Graphics Spooler)
+ */
+function printImageFile(filePath, printer, options = {}) {
+    const copies = Math.max(1, parseInt(options.copies, 10) || 1);
+    const orientation = options.orientation || "auto";
+    const colorMode = options.color_mode || "bw";
+    const isGrayscale = colorMode === "bw";
+
+    const psImageScript = `
+Add-Type -AssemblyName System.Drawing
+
+$printer = '${printer.replace(/'/g, "''")}'
+$file = '${filePath.replace(/'/g, "''")}'
+
+if (-not (Test-Path $file)) {
+    throw "Image file does not exist: $file"
+}
+
+$img = [System.Drawing.Image]::FromFile($file)
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = $printer
+$doc.PrinterSettings.Copies = ${copies}
+
+# Orientation Handling
+if ('${orientation}' -eq 'landscape') {
+    $doc.DefaultPageSettings.Landscape = $true
+} elseif ('${orientation}' -eq 'portrait') {
+    $doc.DefaultPageSettings.Landscape = $false
+} else {
+    # Auto orientation based on image dimensions
+    $doc.DefaultPageSettings.Landscape = ($img.Width -gt $img.Height)
+}
+
+$doc.add_PrintPage({
+    param($sender, $ev)
+    $g = $ev.Graphics
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+
+    $pb = $ev.MarginBounds
+    if ($pb.Width -le 0 -or $pb.Height -le 0) {
+        $pb = $ev.PageBounds
+    }
+
+    $ratio = $img.Width / $img.Height
+    $pageRatio = $pb.Width / $pb.Height
+
+    # Fit image to page margins preserving aspect ratio
+    if ($ratio -gt $pageRatio) {
+        $w = $pb.Width
+        $h = [int]($pb.Width / $ratio)
+    } else {
+        $h = $pb.Height
+        $w = [int]($pb.Height * $ratio)
+    }
+
+    $x = $pb.Left + [int](($pb.Width - $w) / 2)
+    $y = $pb.Top + [int](($pb.Height - $h) / 2)
+
+    # Grayscale conversion if monochrome requested
+    if (${isGrayscale ? "$true" : "$false"}) {
+        $matrix = New-Object System.Drawing.Imaging.ColorMatrix
+        $matrix.Matrix00 = 0.299
+        $matrix.Matrix01 = 0.299
+        $matrix.Matrix02 = 0.299
+        $matrix.Matrix10 = 0.587
+        $matrix.Matrix11 = 0.587
+        $matrix.Matrix12 = 0.587
+        $matrix.Matrix20 = 0.114
+        $matrix.Matrix21 = 0.114
+        $matrix.Matrix22 = 0.114
+        $matrix.Matrix33 = 1.0
+
+        $attr = New-Object System.Drawing.Imaging.ImageAttributes
+        $attr.SetColorMatrix($matrix)
+        $destRect = New-Object System.Drawing.Rectangle($x, $y, $w, $h)
+        $g.DrawImage($img, $destRect, 0, 0, $img.Width, $img.Height, [System.Drawing.GraphicsUnit]::Pixel, $attr)
+        $attr.Dispose()
+    } else {
+        $g.DrawImage($img, $x, $y, $w, $h)
+    }
+
+    $ev.HasMorePages = $false
+})
+
+try {
+    $doc.Print()
+} finally {
+    $doc.Dispose()
+    $img.Dispose()
+}
+`;
+    return runPowerShellScript(psImageScript);
+}
+
+/**
  * Main Print Execution Dispatcher
  */
 async function printFile(filePath, job = {}) {
@@ -231,7 +329,12 @@ try {
         }
     }
 
-    // 4. PDF PRINTING VIA SUMATRAPDF
+    // 4. IMAGE PRINTING (.jpg, .jpeg, .png, .bmp, .gif, .webp, .tif, .tiff)
+    if ([".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tif", ".tiff", ".ico"].includes(ext)) {
+        return await printImageFile(filePath, printer, job);
+    }
+
+    // 5. PDF PRINTING VIA SUMATRAPDF
     if (ext === ".pdf") {
         if (!sumatraPdf) {
             throw new Error(
@@ -241,14 +344,19 @@ try {
         return await printPdfFile(filePath, printer, sumatraPdf, job);
     }
 
-    // 5. IMAGE & FALLBACK DIRECT WINDOWS PRINT
-    const psPrintScript = `
+    // 6. GENERIC FALLBACK FOR OTHER FILE TYPES
+    try {
+        const psPrintScript = `
 $printer = '${printer.replace(/'/g, "''")}'
 $file = '${filePath.replace(/'/g, "''")}'
 
 Start-Process -FilePath $file -Verb PrintTo -ArgumentList $printer -PassThru -Wait
 `;
-    return await runPowerShellScript(psPrintScript);
+        return await runPowerShellScript(psPrintScript);
+    } catch (fallbackErr) {
+        // If Shell PrintTo verb fails, try mspaint or System.Drawing
+        return await printImageFile(filePath, printer, job);
+    }
 }
 
 /**

@@ -70,7 +70,8 @@ class QrPrintController extends Controller
      */
     public function qr(QrPrint $qrPrint)
     {
-        abort_unless($qrPrint->is_active, 404);
+        // Allowed even if inactive, so merchant can print/download QR poster from dashboard
+
 
         $url = route('qr-print.print', [
             'token' => $qrPrint->print_token,
@@ -99,15 +100,31 @@ class QrPrintController extends Controller
      */
     public function print(string $token)
     {
-        $qrPrint = $this->findActivePrint($token);
+        $qrPrint = QrPrint::where('print_token', $token)->firstOrFail();
+        $setting = $qrPrint->shopSetting;
 
         return Inertia::render('qr-print/multi-print', [
             'qrPrint' => [
                 'id' => $qrPrint->id,
-                'title' => $qrPrint->title,
+                'title' => $setting?->shop_name ?: $qrPrint->title,
                 'token' => $qrPrint->print_token,
+                'is_active' => $qrPrint->is_active,
                 'upload_url' => route('qr-print.upload-multi', $qrPrint->print_token),
                 'create_session_url' => route('qr-print.session.create', $qrPrint->print_token),
+                'logo_url' => $setting?->logo_url,
+                'mobile_number' => $setting?->mobile_number,
+                'address' => $setting?->address,
+            ],
+            'shopSettings' => [
+                'shop_name' => $setting?->shop_name ?: $qrPrint->title,
+                'bw_price_per_page' => $setting ? (float)$setting->bw_price_per_page : 2.0,
+                'color_price_per_page' => $setting ? (float)$setting->color_price_per_page : 10.0,
+                'scanner_price_per_page' => $setting ? (float)$setting->scanner_price_per_page : 5.0,
+                'online_payment_enabled' => $setting ? (bool)$setting->online_payment_enabled : true,
+                'counter_payment_enabled' => $setting ? (bool)$setting->counter_payment_enabled : true,
+                'show_currency' => $setting ? (bool)$setting->show_currency : true,
+                'currency_symbol' => $setting?->currency_symbol ?: '₹',
+                'payment_modes' => $setting?->payment_modes ?: ['cash', 'upi', 'card', 'wallet'],
             ],
             'limits' => [
                 'max_files' => 10,
@@ -185,8 +202,10 @@ class QrPrintController extends Controller
     public function createSession(Request $request, string $token)
     {
         $qrPrint = $this->findActivePrint($token);
+        $setting = $qrPrint->shopSetting;
 
         $validated = $request->validate([
+            'payment_method' => ['nullable', 'string', 'in:counter,online,upi,cash,card,wallet'],
             'files' => ['required', 'array', 'min:1', 'max:10'],
             'files.*.document_id' => ['required', 'integer'],
             'files.*.copies' => ['required', 'integer', 'min:1', 'max:20'],
@@ -208,6 +227,11 @@ class QrPrintController extends Controller
 
         abort_unless($documents->count() === $docIds->count(), 400, 'Invalid documents in session.');
 
+        $defaultPrinter = \App\Models\Printer::where('qr_print_id', $qrPrint->id)
+            ->where('is_default', true)
+            ->where('is_active', true)
+            ->first();
+
         // Validate Excel files have at least 1 sheet selected
         foreach ($validated['files'] as $fileConfig) {
             $doc = $documents[$fileConfig['document_id']];
@@ -221,30 +245,118 @@ class QrPrintController extends Controller
             }
         }
 
+        // Pricing Rates from Shop Settings
+        $bwPrice = $setting ? (float)$setting->bw_price_per_page : 2.0;
+        $colorPrice = $setting ? (float)$setting->color_price_per_page : 10.0;
+        $currency = $setting?->currency_symbol ?: '₹';
+
+        $paymentMethod = $validated['payment_method'] ?? 'counter';
+        $paymentStatus = ($paymentMethod === 'online' || $paymentMethod === 'upi') ? 'paid' : 'pending_counter';
+
         $session = PrintSession::create([
             'qr_print_id' => $qrPrint->id,
             'total_files' => count($validated['files']),
             'completed_files' => 0,
             'failed_files' => 0,
             'status' => 'ready',
+            'payment_method' => $paymentMethod,
+            'payment_status' => $paymentStatus,
+            'total_amount' => 0.00,
+            'currency' => $currency,
         ]);
+
+        $totalSessionAmount = 0.0;
 
         foreach ($validated['files'] as $fileConfig) {
             $doc = $documents[$fileConfig['document_id']];
 
+            // Resolve values with fallback chain
+            $resolvedCopies = $fileConfig['copies'] ?? null;
+            $resolvedOrientation = $fileConfig['orientation'] ?? null;
+            $resolvedColorMode = $fileConfig['color_mode'] ?? null;
+            $resolvedPaperSize = $fileConfig['paper_size'] ?? null;
+            $resolvedScaling = $fileConfig['scaling'] ?? null;
+            $resolvedDuplex = $fileConfig['duplex'] ?? null;
+
+            if ($defaultPrinter) {
+                $printerSettings = $defaultPrinter->settings ?? [];
+                
+                $resolvedCopies ??= $printerSettings['copies'] ?? 1;
+                $resolvedOrientation ??= $printerSettings['orientation'] ?? 'auto';
+                $resolvedColorMode ??= $printerSettings['color_mode'] ?? 'bw';
+                $resolvedPaperSize ??= $printerSettings['paper_size'] ?? 'A4';
+                $resolvedScaling ??= $printerSettings['scaling'] ?? 'actual';
+                $resolvedDuplex ??= $printerSettings['duplex'] ?? 'off';
+            } else {
+                $resolvedCopies ??= 1;
+                $resolvedOrientation ??= 'auto';
+                $resolvedColorMode ??= 'bw';
+                $resolvedPaperSize ??= 'A4';
+                $resolvedScaling ??= 'actual';
+                $resolvedDuplex ??= 'off';
+            }
+
+            // Capability check
+            if ($defaultPrinter) {
+                $capabilities = $defaultPrinter->capabilities ?? [];
+
+                if ($resolvedColorMode === 'color' && empty($capabilities['color'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Selected printer does not support color printing.",
+                    ], 422);
+                }
+
+                if (in_array($resolvedDuplex, ['long_edge', 'short_edge']) && empty($capabilities['duplex'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Selected printer does not support duplex printing.",
+                    ], 422);
+                }
+
+                $supportedPaper = $capabilities['paper_sizes'] ?? [];
+                if (!empty($supportedPaper) && !in_array($resolvedPaperSize, $supportedPaper)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Selected printer does not support {$resolvedPaperSize} paper size.",
+                    ], 422);
+                }
+
+                $maxCopies = $defaultPrinter->settings['max_copies'] ?? 20;
+                if ($resolvedCopies > $maxCopies) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Requested copies ({$resolvedCopies}) exceeds maximum allowed copies ({$maxCopies}) for this printer.",
+                    ], 422);
+                }
+            }
+
+            // Calculate job cost
+            $rate = ($resolvedColorMode === 'color') ? $colorPrice : $bwPrice;
+            $pages = 1;
+            if ($doc->file_type === 'excel' && !empty($fileConfig['selected_sheets'])) {
+                $pages = count($fileConfig['selected_sheets']);
+            } elseif ($doc->page_count) {
+                $pages = $doc->page_count;
+            }
+            $jobAmount = (float)($pages * $resolvedCopies * $rate);
+            $totalSessionAmount += $jobAmount;
+
             PrintJob::create([
                 'print_session_id' => $session->id,
                 'print_document_id' => $doc->id,
-                'printer_name' => null,
-                'copies' => $fileConfig['copies'] ?? 1,
-                'orientation' => $fileConfig['orientation'] ?? 'auto',
-                'color_mode' => $fileConfig['color_mode'] ?? 'bw',
-                'paper_size' => $fileConfig['paper_size'] ?? 'A4',
-                'scaling' => $fileConfig['scaling'] ?? 'actual',
-                'duplex' => $fileConfig['duplex'] ?? 'off',
+                'printer_name' => $defaultPrinter ? $defaultPrinter->name : null,
+                'copies' => $resolvedCopies,
+                'orientation' => $resolvedOrientation,
+                'color_mode' => $resolvedColorMode,
+                'paper_size' => $resolvedPaperSize,
+                'scaling' => $resolvedScaling,
+                'duplex' => $resolvedDuplex,
                 'page_range' => $fileConfig['page_range'] ?? null,
                 'selected_sheets' => $fileConfig['selected_sheets'] ?? null,
                 'print_options' => $fileConfig['print_options'] ?? null,
+                'payment_method' => $paymentMethod,
+                'amount' => $jobAmount,
                 'status' => 'pending',
                 'attempts' => 0,
             ]);
@@ -252,6 +364,9 @@ class QrPrintController extends Controller
             $doc->increment('print_count');
             $doc->update(['last_printed_at' => now()]);
         }
+
+        // Update session total amount
+        $session->update(['total_amount' => $totalSessionAmount]);
 
         $qrPrint->increment('print_count');
         $qrPrint->update(['last_printed_at' => now()]);
@@ -279,6 +394,7 @@ class QrPrintController extends Controller
     public function sessionStatus(string $token, string $sessionUuid)
     {
         $qrPrint = $this->findActivePrint($token);
+        $setting = $qrPrint->shopSetting;
 
         $session = PrintSession::with(['jobs.document'])
             ->where('uuid', $sessionUuid)
@@ -287,13 +403,20 @@ class QrPrintController extends Controller
 
         return Inertia::render('qr-print/session-status', [
             'qrPrint' => [
-                'title' => $qrPrint->title,
+                'title' => $setting?->shop_name ?: $qrPrint->title,
                 'token' => $qrPrint->print_token,
                 'home_url' => route('qr-print.print', $token),
+                'logo_url' => $setting?->logo_url,
+                'mobile_number' => $setting?->mobile_number,
+                'address' => $setting?->address,
             ],
             'session' => [
                 'uuid' => $session->uuid,
                 'status' => $session->status,
+                'payment_method' => $session->payment_method ?: 'counter',
+                'payment_status' => $session->payment_status ?: 'pending',
+                'total_amount' => (float)$session->total_amount,
+                'currency' => $session->currency ?: ($setting?->currency_symbol ?: '₹'),
                 'total_files' => $session->total_files,
                 'completed_files' => $session->completed_files,
                 'failed_files' => $session->failed_files,
@@ -309,6 +432,8 @@ class QrPrintController extends Controller
                 'color_mode' => $job->color_mode,
                 'paper_size' => $job->paper_size,
                 'duplex' => $job->duplex,
+                'amount' => (float)$job->amount,
+                'payment_method' => $job->payment_method,
                 'selected_sheets' => $job->selected_sheets,
                 'status' => $job->status,
                 'attempts' => $job->attempts,
@@ -341,6 +466,10 @@ class QrPrintController extends Controller
             'session' => [
                 'uuid' => $session->uuid,
                 'status' => $session->status,
+                'payment_method' => $session->payment_method ?: 'counter',
+                'payment_status' => $session->payment_status ?: 'pending',
+                'total_amount' => (float)$session->total_amount,
+                'currency' => $session->currency ?: '₹',
                 'total_files' => $session->total_files,
                 'completed_files' => $session->completed_files,
                 'failed_files' => $session->failed_files,
@@ -355,6 +484,7 @@ class QrPrintController extends Controller
                 'color_mode' => $job->color_mode,
                 'paper_size' => $job->paper_size,
                 'duplex' => $job->duplex,
+                'amount' => (float)$job->amount,
                 'selected_sheets' => $job->selected_sheets,
                 'status' => $job->status,
                 'attempts' => $job->attempts,
@@ -413,11 +543,26 @@ class QrPrintController extends Controller
     public function shop(string $token)
     {
         $qrPrint = $this->findActivePrint($token);
+        $setting = $qrPrint->shopSetting;
+
         return Inertia::render('customer/shop', [
             'shop' => [
-                'name' => $qrPrint->title,
+                'name' => $setting?->shop_name ?: $qrPrint->title,
                 'slug' => $token,
+                'email' => $setting?->email,
+                'mobile_number' => $setting?->mobile_number,
+                'address' => $setting?->address,
+                'logo_url' => $setting?->logo_url,
                 'upload_url' => route('qr-print.print', $token),
+                'pricing' => [
+                    'bw_price_per_page' => $setting ? (float)$setting->bw_price_per_page : 2.0,
+                    'color_price_per_page' => $setting ? (float)$setting->color_price_per_page : 10.0,
+                    'scanner_price_per_page' => $setting ? (float)$setting->scanner_price_per_page : 5.0,
+                    'currency_symbol' => $setting?->currency_symbol ?: '₹',
+                    'show_currency' => $setting ? (bool)$setting->show_currency : true,
+                    'online_payment_enabled' => $setting ? (bool)$setting->online_payment_enabled : true,
+                    'counter_payment_enabled' => $setting ? (bool)$setting->counter_payment_enabled : true,
+                ],
             ],
         ]);
     }
@@ -440,6 +585,8 @@ class QrPrintController extends Controller
     public function customerPayment(Request $request, string $token)
     {
         $qrPrint = $this->findActivePrint($token);
+        $setting = $qrPrint->shopSetting;
+
         $ids = collect(explode(',', (string) $request->query('documents')))
             ->filter(fn($id) => ctype_digit((string) $id))
             ->map(fn($id) => (int) $id);
@@ -466,14 +613,22 @@ class QrPrintController extends Controller
         $duplex = filter_var($request->query('duplex', false), FILTER_VALIDATE_BOOLEAN);
         $orientation = $request->query('orientation', 'portrait') === 'landscape' ? 'landscape' : 'portrait';
 
-        $rate = self::PRICING[$paperSize][$colorMode] ?? 2;
+        $bwRate = $setting ? (float)$setting->bw_price_per_page : 2.0;
+        $colorRate = $setting ? (float)$setting->color_price_per_page : 10.0;
+        $rate = $colorMode === 'color' ? $colorRate : $bwRate;
+
         $totalDocuments = $documents->count();
         $subtotal = $totalDocuments * $copies * $rate;
 
         return Inertia::render('customer/payment', [
             'shop' => [
-                'name' => $qrPrint->title,
+                'name' => $setting?->shop_name ?: $qrPrint->title,
                 'slug' => $token,
+                'online_payment_enabled' => $setting ? (bool)$setting->online_payment_enabled : true,
+                'counter_payment_enabled' => $setting ? (bool)$setting->counter_payment_enabled : true,
+                'show_currency' => $setting ? (bool)$setting->show_currency : true,
+                'currency_symbol' => $setting?->currency_symbol ?: '₹',
+                'payment_modes' => $setting?->payment_modes ?: ['cash', 'upi', 'card', 'wallet'],
             ],
             'documents' => $documents->map(fn(PrintDocument $doc) => [
                 'id' => $doc->id,
@@ -582,7 +737,12 @@ class QrPrintController extends Controller
 
         $count = PrintDocument::where('qr_print_id', $qrPrint->id)->whereIn('id', $data['documents'])->count();
         abort_unless($count === count($data['documents']), 404);
-        $rate = self::PRICING[$data['paper_size']][$data['color_mode']] ?? 2;
+
+        $setting = $qrPrint->shopSetting;
+        $bwRate = $setting ? (float)$setting->bw_price_per_page : 2.0;
+        $colorRate = $setting ? (float)$setting->color_price_per_page : 10.0;
+        $rate = $data['color_mode'] === 'color' ? $colorRate : $bwRate;
+
         return response()->json([
             'success' => true,
             'estimate' => [
@@ -595,7 +755,11 @@ class QrPrintController extends Controller
 
     private function findActivePrint(string $token): QrPrint
     {
-        return QrPrint::where('print_token', $token)->where('is_active', true)->firstOrFail();
+        $qrPrint = QrPrint::where('print_token', $token)->firstOrFail();
+        if (!$qrPrint->is_active) {
+            abort(403, 'This QR Print Point is currently deactivated.');
+        }
+        return $qrPrint;
     }
 
     public function printed(QrPrint $qrPrint)

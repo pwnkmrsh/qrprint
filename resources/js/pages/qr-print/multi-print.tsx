@@ -31,6 +31,13 @@ import {
     Trash2,
     UploadCloud,
     X,
+    Banknote,
+    QrCode,
+    Store,
+    Phone,
+    MapPin,
+    Lock,
+    ShieldCheck
 } from 'lucide-react';
 import React, { ChangeEvent, useState } from 'react';
 
@@ -72,8 +79,23 @@ interface MultiPrintProps {
         id: number;
         title: string;
         token: string;
+        is_active: boolean;
         upload_url: string;
         create_session_url: string;
+        logo_url?: string | null;
+        mobile_number?: string | null;
+        address?: string | null;
+    };
+    shopSettings?: {
+        shop_name?: string;
+        bw_price_per_page: number;
+        color_price_per_page: number;
+        scanner_price_per_page: number;
+        online_payment_enabled: boolean;
+        counter_payment_enabled: boolean;
+        show_currency: boolean;
+        currency_symbol: string;
+        payment_modes: string[];
     };
     limits: {
         max_files: number;
@@ -82,11 +104,22 @@ interface MultiPrintProps {
     };
 }
 
-export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
+export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrintProps) {
     const [files, setFiles] = useState<UploadedFile[]>([]);
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
     const [globalError, setGlobalError] = useState<string | null>(null);
+
+    // Pricing & Settings
+    const sym = shopSettings?.show_currency !== false ? (shopSettings?.currency_symbol || '₹') : '';
+    const bwRate = shopSettings?.bw_price_per_page ?? 2.0;
+    const colorRate = shopSettings?.color_price_per_page ?? 10.0;
+    const scannerRate = shopSettings?.scanner_price_per_page ?? 5.0;
+    const canCounter = shopSettings?.counter_payment_enabled !== false;
+    const canOnline = shopSettings?.online_payment_enabled !== false;
+
+    // Selected Payment Method ('counter' | 'online')
+    const [paymentMethod, setPaymentMethod] = useState<'counter' | 'online'>(canCounter ? 'counter' : 'online');
 
     // Active sheet selection modal state
     const [activeSheetModalFileIndex, setActiveSheetModalFileIndex] = useState<number | null>(null);
@@ -160,7 +193,7 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                     duplex: 'off',
                     page_selection_type: 'all',
                     page_range: '',
-                    selected_sheets: detectedSheets.length > 0 ? [detectedSheets[0]] : ['Sheet1'], // default to first sheet
+                    selected_sheets: doc.file_type === 'excel' && detectedSheets.length > 0 ? [detectedSheets[0]] : [],
                     margins: 'normal',
                     page_order: 'down_then_over',
                     gridlines: false,
@@ -171,79 +204,107 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
 
             setFiles((prev) => [...prev, ...newFiles]);
         } catch (err: any) {
-            setGlobalError(err.message || 'Unable to upload files. Please try again.');
+            setGlobalError(err.message || 'Failed to upload files. Please try again.');
         } finally {
             setIsUploading(false);
             e.target.value = '';
         }
     };
 
-    // Remove file
-    const removeFile = (index: number) => {
+    // Remove single file
+    const handleRemoveFile = (index: number) => {
         setFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
-    // Reorder files
-    const moveFile = (index: number, direction: 'up' | 'down') => {
+    // Update single file option
+    const updateFileOption = <K extends keyof UploadedFile>(
+        index: number,
+        key: K,
+        value: UploadedFile[K]
+    ) => {
         setFiles((prev) => {
-            const copy = [...prev];
-            const targetIndex = direction === 'up' ? index - 1 : index + 1;
-            if (targetIndex < 0 || targetIndex >= copy.length) return prev;
-            const temp = copy[index];
-            copy[index] = copy[targetIndex];
-            copy[targetIndex] = temp;
-            return copy;
+            const updated = [...prev];
+            updated[index] = { ...updated[index], [key]: value };
+            return updated;
         });
     };
 
-    // Update single file configuration
-    const updateFileConfig = (index: number, updates: Partial<UploadedFile>) => {
+    // Apply settings of one file to all uploaded files
+    const applyToAllFiles = (sourceIndex: number) => {
+        const source = files[sourceIndex];
         setFiles((prev) =>
-            prev.map((file, i) => (i === index ? { ...file, ...updates } : file))
+            prev.map((file) => ({
+                ...file,
+                copies: source.copies,
+                orientation: source.orientation,
+                color_mode: source.color_mode,
+                paper_size: source.paper_size,
+                scaling: source.scaling,
+                duplex: source.duplex,
+                margins: source.margins,
+            }))
         );
     };
 
-    // Sheet Selection Modal Helpers
-    const activeSheetModalFile = activeSheetModalFileIndex !== null ? files[activeSheetModalFileIndex] : null;
+    // Helper: Calculate pages for a single file
+    const getFilePageCount = (file: UploadedFile): number => {
+        if (file.file_type === 'excel') {
+            return Math.max(1, file.selected_sheets.length);
+        }
+        return file.metadata?.page_count || 1;
+    };
+
+    // Helper: Calculate cost for a single file
+    const getFileCost = (file: UploadedFile): number => {
+        const pages = getFilePageCount(file);
+        const rate = file.color_mode === 'color' ? colorRate : bwRate;
+        return pages * file.copies * rate;
+    };
+
+    // Helper: Calculate total estimated cost
+    const calculateTotalCost = (): number => {
+        return files.reduce((sum, file) => sum + getFileCost(file), 0);
+    };
+
+    // Helper: Calculate total impressions
+    const calculateTotalImpressions = (): number => {
+        return files.reduce((sum, file) => sum + getFilePageCount(file) * file.copies, 0);
+    };
+
+    // Sheet selection helpers
+    const activeSheetModalFile =
+        activeSheetModalFileIndex !== null ? files[activeSheetModalFileIndex] : null;
 
     const toggleSheetSelection = (sheetName: string) => {
-        if (activeSheetModalFileIndex === null || !activeSheetModalFile) return;
-        const current = activeSheetModalFile.selected_sheets;
-        const next = current.includes(sheetName)
+        if (activeSheetModalFileIndex === null) return;
+        const current = files[activeSheetModalFileIndex].selected_sheets;
+        const updated = current.includes(sheetName)
             ? current.filter((s) => s !== sheetName)
             : [...current, sheetName];
-        updateFileConfig(activeSheetModalFileIndex, { selected_sheets: next });
+        updateFileOption(activeSheetModalFileIndex, 'selected_sheets', updated);
     };
 
     const selectAllSheets = () => {
-        if (activeSheetModalFileIndex === null || !activeSheetModalFile) return;
-        const allSheets = activeSheetModalFile.metadata?.sheets || [];
-        updateFileConfig(activeSheetModalFileIndex, { selected_sheets: allSheets });
+        if (activeSheetModalFileIndex === null) return;
+        const all = files[activeSheetModalFileIndex].metadata?.sheets || ['Sheet1'];
+        updateFileOption(activeSheetModalFileIndex, 'selected_sheets', [...all]);
     };
 
     const clearAllSheets = () => {
-        if (activeSheetModalFileIndex === null || !activeSheetModalFile) return;
-        updateFileConfig(activeSheetModalFileIndex, { selected_sheets: [] });
+        if (activeSheetModalFileIndex === null) return;
+        updateFileOption(activeSheetModalFileIndex, 'selected_sheets', []);
     };
 
-    // Total estimated page impressions
-    const calculateEstimatedPages = () => {
-        return files.reduce((sum, file) => {
-            let pages = 1;
-            if (file.file_type === 'excel') {
-                pages = Math.max(1, file.selected_sheets.length);
-            } else if (file.file_type === 'pdf') {
-                pages = file.metadata?.page_count || 1;
-            }
-            return sum + pages * file.copies;
-        }, 0);
-    };
-
-    // Validate all files before creating session
+    // Validate before print
     const validateBeforePrint = (): boolean => {
-        for (const file of files) {
-            if (file.file_type === 'excel' && (!file.selected_sheets || file.selected_sheets.length === 0)) {
-                setGlobalError(`Please select at least one sheet for "${file.original_name}".`);
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            if (f.file_type === 'excel' && f.selected_sheets.length === 0) {
+                setGlobalError(`Please select at least one sheet for "${f.original_name}".`);
+                return false;
+            }
+            if (f.page_selection_type === 'range' && !f.page_range.trim()) {
+                setGlobalError(`Please specify a valid page range (e.g. 1-3) for "${f.original_name}".`);
                 return false;
             }
         }
@@ -260,6 +321,7 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
         const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
         const payload = {
+            payment_method: paymentMethod,
             files: files.map((file) => ({
                 document_id: file.id,
                 copies: file.copies,
@@ -309,13 +371,13 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
     const getFileIcon = (type: FileType) => {
         switch (type) {
             case 'pdf':
-                return <FileText className="size-5 text-red-500" />;
+                return <FileText className="size-5 text-rose-500" />;
             case 'excel':
                 return <FileSpreadsheet className="size-5 text-emerald-600" />;
             case 'image':
-                return <ImageIcon className="size-5 text-blue-500" />;
+                return <ImageIcon className="size-5 text-purple-500" />;
             case 'word':
-                return <FileType2 className="size-5 text-sky-600" />;
+                return <FileType2 className="size-5 text-blue-600" />;
             case 'powerpoint':
                 return <Presentation className="size-5 text-amber-600" />;
             default:
@@ -323,34 +385,75 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
         }
     };
 
-    const estimatedImpressions = calculateEstimatedPages();
+    const totalCalculatedCost = calculateTotalCost();
+    const totalImpressions = calculateTotalImpressions();
+
+    if (qrPrint.is_active === false) {
+        return (
+            <main className="bg-gradient-to-b from-background via-muted/20 to-muted/40 min-h-screen py-16 px-4 flex items-center justify-center">
+                <Card className="max-w-md w-full border border-border shadow-lg rounded-3xl p-8 text-center space-y-6 bg-card">
+                    <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-950/30 text-rose-600">
+                        <AlertCircle className="size-8" />
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                            QR Print Inactive
+                        </h1>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                            This QR Print Point (<strong>{qrPrint.title}</strong>) is currently inactive. Please ask the shop owner to reactivate it.
+                        </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-border">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                            QR Print Setup
+                        </span>
+                    </div>
+                </Card>
+            </main>
+        );
+    }
 
     return (
         <>
             <Head title={`QR Print | ${qrPrint.title}`} />
-            <main className="bg-gradient-to-b from-background via-muted/20 to-muted/40 min-h-screen py-6 px-4 sm:px-6 pb-28">
+            <main className="bg-gradient-to-b from-background via-muted/20 to-muted/40 min-h-screen py-6 px-4 sm:px-6 pb-36">
                 <div className="mx-auto max-w-4xl space-y-6">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b pb-4">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
-                                    <Printer className="size-5" />
-                                </span>
-                                <div>
-                                    <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                                        QR Print
-                                    </h1>
-                                    <p className="text-muted-foreground text-xs sm:text-sm">
-                                        Upload documents and configure how you want them printed.
-                                    </p>
+                    {/* Header Banner with Shop Branding & Live Rate Badges */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
+                        <div className="flex items-center gap-3">
+                            {qrPrint.logo_url ? (
+                                <div className="size-12 rounded-xl border bg-background p-1.5 shadow-xs flex items-center justify-center shrink-0">
+                                    <img src={qrPrint.logo_url} alt={qrPrint.title} className="size-full object-contain rounded-lg" />
                                 </div>
+                            ) : (
+                                <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs shrink-0">
+                                    <Printer className="size-6" />
+                                </span>
+                            )}
+                            <div>
+                                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                                    {qrPrint.title}
+                                </h1>
+                                {(qrPrint.mobile_number || qrPrint.address) && (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                        {qrPrint.mobile_number && <span>📞 {qrPrint.mobile_number}</span>}
+                                        {qrPrint.address && <span className="truncate max-w-[220px]">📍 {qrPrint.address}</span>}
+                                    </div>
+                                )}
                             </div>
                         </div>
-                        <Badge variant="outline" className="w-fit text-xs font-normal py-1 px-3 bg-card">
-                            <Sparkles className="size-3.5 text-primary mr-1" />
-                            {qrPrint.title}
-                        </Badge>
+
+                        {/* Live Pricing Rate Badges */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <div className="px-2.5 py-1 rounded-lg border bg-card text-xs font-semibold shadow-2xs">
+                                ⬛ B/W: <span className="text-primary font-bold">{sym}{Number(bwRate).toFixed(2)}/pg</span>
+                            </div>
+                            <div className="px-2.5 py-1 rounded-lg border border-purple-500/30 bg-purple-500/5 text-purple-700 dark:text-purple-300 text-xs font-semibold shadow-2xs">
+                                🎨 Color: <span className="font-bold">{sym}{Number(colorRate).toFixed(2)}/pg</span>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Global Error Banner */}
@@ -370,14 +473,14 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                                     <UploadCloud className="size-7 animate-bounce" />
                                 </div>
                                 <div>
-                                    <span className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors">
+                                    <span className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors">
                                         <FileUp className="size-4" />
-                                        + Add Files
+                                        + Select Documents to Print
                                     </span>
                                 </div>
                                 <div className="space-y-1 text-xs text-muted-foreground">
                                     <p className="font-medium text-foreground">
-                                        Supported: PDF, Excel, Word, PowerPoint, JPG, PNG
+                                        Supported: PDF, Excel, Word, PowerPoint, JPG, PNG, WEBP
                                     </p>
                                     <p>
                                         Up to {limits.max_files} files · Maximum {limits.max_file_size_mb} MB per file
@@ -408,10 +511,10 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                             <div className="flex items-center justify-between">
                                 <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
                                     <LayoutGrid className="size-4 text-primary" />
-                                    Uploaded Files ({files.length} of {limits.max_files})
+                                    Uploaded Documents ({files.length} of {limits.max_files})
                                 </h2>
-                                <span className="text-xs text-muted-foreground">
-                                    Independent settings per file
+                                <span className="text-xs text-muted-foreground font-medium">
+                                    Per-document print options
                                 </span>
                             </div>
 
@@ -419,248 +522,154 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                                 {files.map((file, index) => {
                                     const detectedSheets = file.metadata?.sheets || [];
                                     const hasSheets = file.file_type === 'excel' && detectedSheets.length > 0;
+                                    const fileCost = getFileCost(file);
+                                    const filePages = getFilePageCount(file);
 
                                     return (
-                                        <Card key={file.id} className="shadow-xs border overflow-hidden">
-                                            {/* File Header Bar */}
-                                            <div className="bg-muted/30 border-b px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-card border shadow-xs">
-                                                        {getFileIcon(file.file_type)}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-semibold text-sm truncate text-foreground">
-                                                                {index + 1}. {file.original_name}
-                                                            </span>
-                                                            <Badge variant="secondary" className="capitalize text-[10px] px-1.5 py-0 shrink-0">
-                                                                {file.file_type}
-                                                            </Badge>
+                                        <Card key={file.id} className="border border-border shadow-xs overflow-hidden">
+                                            {/* File Header */}
+                                            <CardHeader className="bg-muted/20 border-b p-3.5 sm:p-4">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <div className="p-2 rounded-lg bg-background border shrink-0">
+                                                            {getFileIcon(file.file_type)}
                                                         </div>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {(file.file_size / 1024 / 1024).toFixed(2)} MB
-                                                            {file.file_type === 'excel' && ` · ${detectedSheets.length} sheet${detectedSheets.length === 1 ? '' : 's'}`}
-                                                            {file.file_type === 'pdf' && ` · ${file.metadata?.page_count || 1} page${(file.metadata?.page_count || 1) === 1 ? '' : 's'}`}
-                                                        </span>
+                                                        <div className="min-w-0">
+                                                            <CardTitle className="text-sm sm:text-base truncate font-bold text-foreground">
+                                                                {file.original_name}
+                                                            </CardTitle>
+                                                            <CardDescription className="text-xs flex items-center gap-2 mt-0.5">
+                                                                <span>{(file.file_size / 1024 / 1024).toFixed(2)} MB</span>
+                                                                <span>·</span>
+                                                                <span className="capitalize">{file.file_type}</span>
+                                                                <span>·</span>
+                                                                <span>{filePages} {filePages === 1 ? 'page' : 'pages'}</span>
+                                                            </CardDescription>
+                                                        </div>
                                                     </div>
-                                                </div>
 
-                                                {/* Card Action Controls */}
-                                                <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
-                                                    {/* Preview Button */}
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-8 text-xs gap-1"
-                                                        onClick={() => setPreviewFile(file)}
-                                                    >
-                                                        <Eye className="size-3.5" />
-                                                        Preview
-                                                    </Button>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        {/* Price Tag Pill */}
+                                                        <Badge variant="outline" className="text-xs font-bold py-1 px-2.5 bg-primary/10 text-primary border-primary/20">
+                                                            {sym}{fileCost.toFixed(2)}
+                                                        </Badge>
 
-                                                    {/* Reorder Buttons */}
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-8"
-                                                        disabled={index === 0}
-                                                        onClick={() => moveFile(index, 'up')}
-                                                        title="Move Up"
-                                                    >
-                                                        <ArrowUp className="size-3.5" />
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-8"
-                                                        disabled={index === files.length - 1}
-                                                        onClick={() => moveFile(index, 'down')}
-                                                        title="Move Down"
-                                                    >
-                                                        <ArrowDown className="size-3.5" />
-                                                    </Button>
+                                                        {/* Preview Button */}
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-8 text-muted-foreground hover:text-foreground"
+                                                            onClick={() => setPreviewFile(file)}
+                                                            title="Preview File"
+                                                        >
+                                                            <Eye className="size-4" />
+                                                        </Button>
 
-                                                    {/* Remove Button */}
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                        onClick={() => removeFile(index)}
-                                                        title="Remove File"
-                                                    >
-                                                        <Trash2 className="size-3.5" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <CardContent className="p-4 sm:p-5 space-y-4">
-                                                {/* Excel Worksheet Selection Block */}
-                                                {file.file_type === 'excel' && (
-                                                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 space-y-2.5">
-                                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <FileSpreadsheet className="size-4 text-emerald-600" />
-                                                                <span className="text-xs font-semibold text-emerald-950 dark:text-emerald-300">
-                                                                    Worksheets to Print:
-                                                                </span>
-                                                                <span className="text-xs text-muted-foreground font-normal">
-                                                                    ({detectedSheets.length} found)
-                                                                </span>
-                                                            </div>
+                                                        {/* Apply to All */}
+                                                        {files.length > 1 && (
                                                             <Button
                                                                 type="button"
                                                                 variant="outline"
                                                                 size="sm"
-                                                                className="h-7 text-xs border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
-                                                                onClick={() => setActiveSheetModalFileIndex(index)}
+                                                                className="h-8 text-xs gap-1 hidden sm:flex"
+                                                                onClick={() => applyToAllFiles(index)}
+                                                                title="Apply these settings to all files"
                                                             >
-                                                                <Settings className="size-3 mr-1" />
-                                                                Configure Sheets ({file.selected_sheets.length})
+                                                                <Copy className="size-3.5" />
+                                                                Apply to All
                                                             </Button>
-                                                        </div>
-
-                                                        {/* Selected sheet badges preview */}
-                                                        <div className="flex flex-wrap gap-1.5 items-center">
-                                                            {file.selected_sheets.length === 0 ? (
-                                                                <span className="text-xs font-medium text-destructive flex items-center gap-1">
-                                                                    <AlertCircle className="size-3" />
-                                                                    No sheet selected! Please click "Configure Sheets".
-                                                                </span>
-                                                            ) : (
-                                                                file.selected_sheets.map((sheet) => (
-                                                                    <Badge
-                                                                        key={sheet}
-                                                                        variant="secondary"
-                                                                        className="text-xs bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 border-emerald-500/20"
-                                                                    >
-                                                                        <Check className="size-3 mr-1 text-emerald-600" />
-                                                                        {sheet}
-                                                                    </Badge>
-                                                                ))
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* PDF Page Range Block */}
-                                                {file.file_type === 'pdf' && (
-                                                    <div className="grid gap-3 sm:grid-cols-2 rounded-lg bg-muted/20 p-3 border text-xs">
-                                                        <div>
-                                                            <label className="font-medium text-foreground block mb-1.5">
-                                                                Page Selection
-                                                            </label>
-                                                            <div className="flex items-center gap-2">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => updateFileConfig(index, { page_selection_type: 'all' })}
-                                                                    className={`px-2.5 py-1.5 rounded-md border text-xs font-medium ${
-                                                                        file.page_selection_type === 'all'
-                                                                            ? 'border-primary bg-primary/10 text-primary font-semibold'
-                                                                            : 'border-input bg-card'
-                                                                    }`}
-                                                                >
-                                                                    All Pages
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => updateFileConfig(index, { page_selection_type: 'range' })}
-                                                                    className={`px-2.5 py-1.5 rounded-md border text-xs font-medium ${
-                                                                        file.page_selection_type === 'range'
-                                                                            ? 'border-primary bg-primary/10 text-primary font-semibold'
-                                                                            : 'border-input bg-card'
-                                                                    }`}
-                                                                >
-                                                                    Page Range
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        {file.page_selection_type === 'range' && (
-                                                            <div>
-                                                                <label className="font-medium text-foreground block mb-1.5">
-                                                                    Specify Range (e.g. 1-3, 5, 8-10)
-                                                                </label>
-                                                                <input
-                                                                    type="text"
-                                                                    placeholder="1-3,5"
-                                                                    value={file.page_range}
-                                                                    onChange={(e) => updateFileConfig(index, { page_range: e.target.value })}
-                                                                    className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-                                                                />
-                                                            </div>
                                                         )}
-                                                    </div>
-                                                )}
 
-                                                {/* Print Settings Grid */}
-                                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                                                        {/* Delete File */}
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-8 text-destructive hover:bg-destructive/10"
+                                                            onClick={() => handleRemoveFile(index)}
+                                                            title="Remove file"
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </CardHeader>
+
+                                            {/* Print Configuration Controls */}
+                                            <CardContent className="p-4 space-y-4 text-xs">
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                                     {/* Copies */}
-                                                    <div className="space-y-1.5">
-                                                        <label className="font-medium text-foreground">Copies (1-20)</label>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                size="icon"
-                                                                className="size-7"
-                                                                onClick={() => updateFileConfig(index, { copies: Math.max(1, file.copies - 1) })}
-                                                                disabled={file.copies <= 1}
-                                                            >
-                                                                -
-                                                            </Button>
-                                                            <span className="w-10 text-center font-bold text-sm">
-                                                                {file.copies}
-                                                            </span>
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                size="icon"
-                                                                className="size-7"
-                                                                onClick={() => updateFileConfig(index, { copies: Math.min(20, file.copies + 1) })}
-                                                                disabled={file.copies >= 20}
-                                                            >
-                                                                +
-                                                            </Button>
-                                                        </div>
+                                                    <div className="space-y-1">
+                                                        <label className="font-semibold text-muted-foreground">Copies</label>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={20}
+                                                            value={file.copies}
+                                                            onChange={(e) =>
+                                                                updateFileOption(
+                                                                    index,
+                                                                    'copies',
+                                                                    Math.max(1, parseInt(e.target.value, 10) || 1)
+                                                                )
+                                                            }
+                                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                                        />
+                                                    </div>
+
+                                                    {/* Color Mode */}
+                                                    <div className="space-y-1">
+                                                        <label className="font-semibold text-muted-foreground">Color Mode</label>
+                                                        <select
+                                                            value={file.color_mode}
+                                                            onChange={(e) =>
+                                                                updateFileOption(
+                                                                    index,
+                                                                    'color_mode',
+                                                                    e.target.value as 'bw' | 'color'
+                                                                )
+                                                            }
+                                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                                        >
+                                                            <option value="bw">Black & White ({sym}{Number(bwRate).toFixed(2)}/pg)</option>
+                                                            <option value="color">Full Color ({sym}{Number(colorRate).toFixed(2)}/pg)</option>
+                                                        </select>
                                                     </div>
 
                                                     {/* Orientation */}
-                                                    <div className="space-y-1.5">
-                                                        <label className="font-medium text-foreground">Orientation</label>
+                                                    <div className="space-y-1">
+                                                        <label className="font-semibold text-muted-foreground">Orientation</label>
                                                         <select
                                                             value={file.orientation}
-                                                            onChange={(e) => updateFileConfig(index, { orientation: e.target.value as any })}
-                                                            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                                                            onChange={(e) =>
+                                                                updateFileOption(
+                                                                    index,
+                                                                    'orientation',
+                                                                    e.target.value as 'auto' | 'portrait' | 'landscape'
+                                                                )
+                                                            }
+                                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
                                                         >
-                                                            <option value="auto">Auto</option>
+                                                            <option value="auto">Auto Detect</option>
                                                             <option value="portrait">Portrait</option>
                                                             <option value="landscape">Landscape</option>
                                                         </select>
                                                     </div>
 
-                                                    {/* Color Mode */}
-                                                    <div className="space-y-1.5">
-                                                        <label className="font-medium text-foreground">Color Mode</label>
-                                                        <select
-                                                            value={file.color_mode}
-                                                            onChange={(e) => updateFileConfig(index, { color_mode: e.target.value as any })}
-                                                            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary font-medium"
-                                                        >
-                                                            <option value="bw">Black & White (B&W)</option>
-                                                            <option value="color">Color</option>
-                                                        </select>
-                                                    </div>
-
                                                     {/* Paper Size */}
-                                                    <div className="space-y-1.5">
-                                                        <label className="font-medium text-foreground">Paper Size</label>
+                                                    <div className="space-y-1">
+                                                        <label className="font-semibold text-muted-foreground">Paper Size</label>
                                                         <select
                                                             value={file.paper_size}
-                                                            onChange={(e) => updateFileConfig(index, { paper_size: e.target.value as any })}
-                                                            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                                                            onChange={(e) =>
+                                                                updateFileOption(
+                                                                    index,
+                                                                    'paper_size',
+                                                                    e.target.value as 'A4' | 'A3' | 'Letter' | 'Legal'
+                                                                )
+                                                            }
+                                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
                                                         >
                                                             <option value="A4">A4</option>
                                                             <option value="A3">A3</option>
@@ -670,84 +679,49 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                                                     </div>
                                                 </div>
 
-                                                {/* Advanced/Specific File Options */}
-                                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-1 text-xs border-t">
-                                                    {/* Scaling */}
-                                                    <div className="space-y-1.5">
-                                                        <label className="font-medium text-foreground">Scaling</label>
-                                                        <select
-                                                            value={file.scaling}
-                                                            onChange={(e) => updateFileConfig(index, { scaling: e.target.value as any })}
-                                                            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-                                                        >
-                                                            <option value="actual">Actual Size</option>
-                                                            <option value="fit_to_page">Fit to Page</option>
-                                                            {file.file_type === 'excel' && (
-                                                                <>
-                                                                    <option value="fit_columns">Fit All Columns to One Page</option>
-                                                                    <option value="fit_rows">Fit All Rows to One Page</option>
-                                                                </>
-                                                            )}
-                                                            {file.file_type === 'pdf' && (
-                                                                <option value="shrink_to_fit">Shrink to Fit</option>
-                                                            )}
-                                                            {file.file_type === 'image' && (
-                                                                <option value="fill_page">Fill Page</option>
-                                                            )}
-                                                        </select>
-                                                    </div>
-
-                                                    {/* Duplex */}
-                                                    <div className="space-y-1.5">
-                                                        <label className="font-medium text-foreground">Duplex (Double Sided)</label>
+                                                {/* Second Row: Duplex & Excel Sheet Picker */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-border">
+                                                    {/* Duplex Sided */}
+                                                    <div className="space-y-1">
+                                                        <label className="font-semibold text-muted-foreground">Sides</label>
                                                         <select
                                                             value={file.duplex}
-                                                            onChange={(e) => updateFileConfig(index, { duplex: e.target.value as any })}
-                                                            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                                                            onChange={(e) =>
+                                                                updateFileOption(
+                                                                    index,
+                                                                    'duplex',
+                                                                    e.target.value as 'off' | 'long_edge' | 'short_edge'
+                                                                )
+                                                            }
+                                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
                                                         >
-                                                            <option value="off">Off (Single Sided)</option>
-                                                            <option value="long_edge">Long Edge (Booklet)</option>
-                                                            <option value="short_edge">Short Edge (Calendar)</option>
+                                                            <option value="off">Single Sided</option>
+                                                            <option value="long_edge">2-Sided (Flip on Long Edge)</option>
+                                                            <option value="short_edge">2-Sided (Flip on Short Edge)</option>
                                                         </select>
                                                     </div>
 
-                                                    {/* Excel Extra Checkboxes */}
-                                                    {file.file_type === 'excel' && (
-                                                        <div className="flex items-center gap-4 pt-4 sm:col-span-2 lg:col-span-1">
-                                                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={file.gridlines}
-                                                                    onChange={(e) => updateFileConfig(index, { gridlines: e.target.checked })}
-                                                                    className="size-3.5 rounded text-primary"
-                                                                />
-                                                                <span className="text-foreground">Gridlines</span>
-                                                            </label>
-                                                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={file.row_col_headers}
-                                                                    onChange={(e) => updateFileConfig(index, { row_col_headers: e.target.checked })}
-                                                                    className="size-3.5 rounded text-primary"
-                                                                />
-                                                                <span className="text-foreground">Headers</span>
-                                                            </label>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Image Position */}
-                                                    {file.file_type === 'image' && (
-                                                        <div className="space-y-1.5">
-                                                            <label className="font-medium text-foreground">Image Position</label>
-                                                            <select
-                                                                value={file.image_position}
-                                                                onChange={(e) => updateFileConfig(index, { image_position: e.target.value as any })}
-                                                                className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+                                                    {/* Excel Sheet Selection CTA */}
+                                                    {hasSheets && (
+                                                        <div className="space-y-1">
+                                                            <label className="font-semibold text-muted-foreground">Excel Worksheets</label>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="w-full justify-between h-9 text-xs border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
+                                                                onClick={() => setActiveSheetModalFileIndex(index)}
                                                             >
-                                                                <option value="center">Center</option>
-                                                                <option value="top">Top</option>
-                                                                <option value="bottom">Bottom</option>
-                                                            </select>
+                                                                <span className="flex items-center gap-1.5 truncate">
+                                                                    <FileSpreadsheet className="size-3.5" />
+                                                                    {file.selected_sheets.length === 0
+                                                                        ? 'Select sheets to print'
+                                                                        : `${file.selected_sheets.length} sheet(s) selected`}
+                                                                </span>
+                                                                <Badge variant="secondary" className="text-[10px] ml-2">
+                                                                    Change
+                                                                </Badge>
+                                                            </Button>
                                                         </div>
                                                     )}
                                                 </div>
@@ -757,37 +731,129 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                                 })}
                             </div>
 
+                            {/* Payment Options Selection Box */}
+                            <Card className="border border-border shadow-xs overflow-hidden">
+                                <CardHeader className="bg-muted/15 border-b pb-3">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Banknote className="size-4 text-primary" />
+                                        Select Payment Method
+                                    </CardTitle>
+                                    <CardDescription className="text-xs">
+                                        Choose how you would like to pay for your print order.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="p-4 space-y-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {/* Option 1: Pay at Counter */}
+                                        {canCounter && (
+                                            <label
+                                                onClick={() => setPaymentMethod('counter')}
+                                                className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all ${
+                                                    paymentMethod === 'counter'
+                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                        : 'border-input bg-card hover:bg-muted/30'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="payment_method"
+                                                    value="counter"
+                                                    checked={paymentMethod === 'counter'}
+                                                    onChange={() => setPaymentMethod('counter')}
+                                                    className="sr-only"
+                                                />
+                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                                                    <Store className="size-5" />
+                                                </div>
+                                                <div className="flex-1 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-sm text-foreground">
+                                                            Pay at Shop Counter
+                                                        </span>
+                                                        <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold">
+                                                            Cash / UPI
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                                        Spools job to printer immediately. Pay in cash or QR at counter when collecting printout.
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        )}
+
+                                        {/* Option 2: Pay Online */}
+                                        {canOnline && (
+                                            <label
+                                                onClick={() => setPaymentMethod('online')}
+                                                className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all ${
+                                                    paymentMethod === 'online'
+                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                        : 'border-input bg-card hover:bg-muted/30'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="payment_method"
+                                                    value="online"
+                                                    checked={paymentMethod === 'online'}
+                                                    onChange={() => setPaymentMethod('online')}
+                                                    className="sr-only"
+                                                />
+                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
+                                                    <QrCode className="size-5" />
+                                                </div>
+                                                <div className="flex-1 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-sm text-foreground">
+                                                            Pay Online (UPI / Card)
+                                                        </span>
+                                                        <Badge variant="secondary" className="text-[10px] bg-blue-500/10 text-blue-600 font-bold">
+                                                            Instant
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                                        Fast digital payment via GPay, PhonePe, Paytm, BHIM UPI, or Cards.
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
                             {/* Print Queue Summary Card */}
-                            <Card className="shadow-sm border bg-muted/10">
+                            <Card className="shadow-xs border bg-muted/10">
                                 <CardHeader className="pb-3 border-b">
                                     <CardTitle className="text-base flex items-center justify-between">
                                         <span className="flex items-center gap-2">
                                             <Printer className="size-4 text-primary" />
-                                            Print Summary
+                                            Order & Pricing Summary
                                         </span>
-                                        <Badge variant="outline" className="text-xs">
-                                            {files.length} {files.length === 1 ? 'file' : 'files'} · ~{estimatedImpressions} impressions
+                                        <Badge variant="outline" className="text-xs font-semibold">
+                                            {files.length} {files.length === 1 ? 'file' : 'files'} · ~{totalImpressions} impressions
                                         </Badge>
                                     </CardTitle>
                                 </CardHeader>
-                                <CardContent className="p-4 space-y-2 text-xs">
-                                    <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
-                                        {files.map((file, i) => (
-                                            <li key={file.id} className="leading-relaxed">
-                                                <span className="font-semibold text-foreground">{file.original_name}</span>
-                                                {' — '}
-                                                {file.file_type === 'excel' && (
-                                                    <span className="text-emerald-700 dark:text-emerald-300 font-medium">
-                                                        Sheet: {file.selected_sheets.join(', ') || 'None'} ·{' '}
-                                                    </span>
-                                                )}
-                                                <span className="capitalize">{file.orientation}</span> ·{' '}
-                                                <span>{file.color_mode === 'bw' ? 'B&W' : 'Color'}</span> ·{' '}
-                                                <span>{file.paper_size}</span> ·{' '}
-                                                <span>{file.copies} {file.copies === 1 ? 'copy' : 'copies'}</span>
-                                            </li>
+                                <CardContent className="p-4 space-y-3 text-xs">
+                                    <div className="space-y-1.5 text-muted-foreground">
+                                        {files.map((file) => (
+                                            <div key={file.id} className="flex justify-between items-center">
+                                                <span className="font-medium text-foreground truncate max-w-[260px] sm:max-w-md">
+                                                    {file.original_name} ({file.copies}x · {file.color_mode.toUpperCase()})
+                                                </span>
+                                                <span className="font-semibold text-foreground shrink-0">
+                                                    {sym}{getFileCost(file).toFixed(2)}
+                                                </span>
+                                            </div>
                                         ))}
-                                    </ol>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-border flex justify-between items-center text-sm font-bold text-foreground">
+                                        <span>Total Calculated Amount</span>
+                                        <span className="text-2xl font-black text-primary">
+                                            {sym}{totalCalculatedCost.toFixed(2)}
+                                        </span>
+                                    </div>
                                 </CardContent>
                             </Card>
                         </div>
@@ -798,17 +864,17 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                 {files.length > 0 && (
                     <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t p-3 sm:p-4 shadow-lg">
                         <div className="mx-auto max-w-4xl flex items-center justify-between gap-4">
-                            <div className="hidden sm:block">
-                                <div className="text-sm font-semibold text-foreground">
-                                    {files.length} {files.length === 1 ? 'file ready' : 'files ready'}
+                            <div>
+                                <div className="text-xs text-muted-foreground font-medium">
+                                    Total ({files.length} files) · {paymentMethod === 'counter' ? 'Pay at Counter' : 'Online Payment'}
                                 </div>
-                                <div className="text-xs text-muted-foreground">
-                                    Independent print settings applied
+                                <div className="text-xl sm:text-2xl font-black text-primary">
+                                    {sym}{totalCalculatedCost.toFixed(2)}
                                 </div>
                             </div>
 
                             <Button
-                                className="w-full sm:w-auto min-w-[240px] text-base font-bold shadow-md py-6 gap-2"
+                                className="w-full sm:w-auto min-w-[240px] text-base font-bold shadow-md py-6 gap-2 rounded-xl"
                                 size="lg"
                                 onClick={handlePrintAll}
                                 disabled={isCreatingSession || files.length === 0}
@@ -821,7 +887,9 @@ export default function MultiPrint({ qrPrint, limits }: MultiPrintProps) {
                                 ) : (
                                     <>
                                         <Printer className="size-5" />
-                                        🖨️ Print All ({files.length})
+                                        {paymentMethod === 'counter'
+                                            ? `🖨️ Pay at Counter & Print (${sym}${totalCalculatedCost.toFixed(2)})`
+                                            : `💳 Pay Online & Print (${sym}${totalCalculatedCost.toFixed(2)})`}
                                     </>
                                 )}
                             </Button>

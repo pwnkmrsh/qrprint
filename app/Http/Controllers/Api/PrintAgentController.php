@@ -16,6 +16,9 @@ class PrintAgentController extends Controller
      */
     public function jobs(Request $request)
     {
+        $agentId = $request->input('agent_id', 'AGENT-001');
+        \Cache::put("agent_{$agentId}_last_seen", now()->toDateTimeString(), 300);
+
         $jobs = PrintJob::with(['document', 'session'])
             ->where('status', 'pending')
             ->orderBy('created_at')
@@ -198,7 +201,18 @@ class PrintAgentController extends Controller
      */
     public function capabilities(Request $request)
     {
-        // Store or acknowledge agent capabilities (e.g. printer models, color, duplex support)
+        $agentId = $request->input('agent_id', 'AGENT-001');
+        $printerName = $request->input('printer_name');
+        $capabilities = $request->input('capabilities');
+
+        \Cache::put("agent_{$agentId}_last_seen", now()->toDateTimeString(), 300);
+        if ($printerName) {
+            \Cache::put("agent_{$agentId}_printer_name", $printerName, 86400);
+        }
+        if ($capabilities) {
+            \Cache::put("agent_{$agentId}_capabilities", $capabilities, 86400);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Capabilities recorded.',

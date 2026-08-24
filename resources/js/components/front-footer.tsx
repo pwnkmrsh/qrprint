@@ -1,5 +1,6 @@
 import { QrCode, Heart, ShieldCheck, Mail, Phone, MessageSquare, ArrowUpRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import AppLogo from '@/components/app-logo';
 
 export default function FrontFooter() {
     const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -25,10 +26,7 @@ export default function FrontFooter() {
                             onClick={(e) => scrollToSection(e, '#home')}
                             className="flex items-center gap-2.5 group"
                         >
-                            <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md shadow-primary/20">
-                                <QrCode className="h-5 w-5" />
-                            </div>
-                            <span className="font-extrabold text-xl tracking-tight">QRPrintSetu</span>
+                            <AppLogo />
                         </a>
                         <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
                             Next-generation QR code print automation software for Indian cyber cafes, stationery shops, and campus Xerox centers. Zero WhatsApp queues, automated UPI payments, and direct Windows spooling.
@@ -167,7 +165,7 @@ export default function FrontFooter() {
 
                 {/* Bottom Bar */}
                 <div className="pt-8 border-t border-border/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-                    <p>© {new Date().getFullYear()} QRPrintSetu. Built for India's Print Shop Revolution.</p>
+                    <p>© {new Date().getFullYear()} Print Setu. Built for India's Print Shop Revolution.</p>
                     <div className="flex items-center gap-6">
                         <a
                             href="/privacy-policy"

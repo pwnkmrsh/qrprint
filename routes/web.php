@@ -8,6 +8,10 @@ use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\QrPrintController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PrinterController;
+use App\Http\Controllers\ShopSettingController;
+use App\Http\Controllers\PrintJobHistoryController;
 use App\Http\Controllers\Api\PrintAgentController;
 
 Route::get('/', function () {
@@ -27,9 +31,56 @@ Route::get('/security-declaration', function () {
 })->name('security-declaration');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('dashboard/toggle-qr', [DashboardController::class, 'toggleQr'])->name('dashboard.toggle-qr');
+    Route::post('dashboard/update-profile', [DashboardController::class, 'updateProfile'])->name('dashboard.update-profile');
+    Route::post('dashboard/job/{job}/retry', [DashboardController::class, 'retryJob'])->name('dashboard.job.retry');
+    Route::post('dashboard/job/{job}/cancel', [DashboardController::class, 'cancelJob'])->name('dashboard.job.cancel');
+    Route::post('dashboard/job/{job}/close', [DashboardController::class, 'closeJob'])->name('dashboard.job.close');
+    Route::get('dashboard/qr/print', [DashboardController::class, 'printPoster'])->name('dashboard.qr.print');
+
+    // Print Job History & Management routes
+    Route::get('shop/jobs', [PrintJobHistoryController::class, 'index'])->name('shop.jobs.index');
+    Route::post('shop/jobs/{job}/retry', [PrintJobHistoryController::class, 'retry'])->name('shop.jobs.retry');
+    Route::post('shop/jobs/{job}/cancel', [PrintJobHistoryController::class, 'cancel'])->name('shop.jobs.cancel');
+    Route::post('shop/jobs/{job}/close', [PrintJobHistoryController::class, 'close'])->name('shop.jobs.close');
+    Route::post('shop/jobs/bulk-action', [PrintJobHistoryController::class, 'bulkAction'])->name('shop.jobs.bulk-action');
+
+    // Shop Settings hub routes
+    Route::get('shop/settings', [ShopSettingController::class, 'index'])->name('shop.settings.index');
+    Route::post('shop/settings/profile', [ShopSettingController::class, 'updateProfile'])->name('shop.settings.profile.update');
+    Route::post('shop/settings/printer', [ShopSettingController::class, 'updatePrinter'])->name('shop.settings.printer.update');
+    Route::post('shop/settings/pricing', [ShopSettingController::class, 'updatePricing'])->name('shop.settings.pricing.update');
+    Route::post('shop/settings/payment', [ShopSettingController::class, 'updatePayment'])->name('shop.settings.payment.update');
+    Route::get('shop/settings/auto-detect-printers', [ShopSettingController::class, 'autoDetectPrinters'])->name('shop.settings.auto-detect-printers');
+    Route::get('shop/settings/printer-status', [ShopSettingController::class, 'printerStatus'])->name('shop.settings.printer-status');
+    Route::post('shop/settings/print-test', [ShopSettingController::class, 'printTest'])->name('shop.settings.print-test');
+
+    // Printers settings routes
+    Route::get('shop/printers', [PrinterController::class, 'index'])
+        ->name('shop.printers.index')
+        ->middleware('permission:printer.view');
+    Route::get('shop/printers/{printer}/settings', [PrinterController::class, 'settings'])
+        ->name('shop.printers.settings')
+        ->middleware('permission:printer.settings');
+    Route::patch('shop/printers/{printer}/settings', [PrinterController::class, 'updateSettings'])
+        ->name('shop.printers.settings.update')
+        ->middleware('permission:printer.settings');
+    Route::post('shop/printers/{printer}/test', [PrinterController::class, 'testPrint'])
+        ->name('shop.printers.test-print')
+        ->middleware('permission:printer.test');
+    Route::post('shop/printers/{printer}/test-connection', [PrinterController::class, 'testConnection'])
+        ->name('shop.printers.test-connection')
+        ->middleware('permission:printer.test');
+    Route::post('shop/printers/{printer}/set-default', [PrinterController::class, 'setDefault'])
+        ->name('shop.printers.set-default')
+        ->middleware('permission:printer.set_default');
+    Route::post('shop/printers/{printer}/activate', [PrinterController::class, 'activate'])
+        ->name('shop.printers.activate')
+        ->middleware('permission:printer.delete');
+    Route::post('shop/printers/{printer}/deactivate', [PrinterController::class, 'deactivate'])
+        ->name('shop.printers.deactivate')
+        ->middleware('permission:printer.delete');
 
     Route::resource('products', ProductController::class)->middleware('permission:access-products-module');
     Route::resource('categories', CategoryController::class)->middleware('permission:access-categories-module');

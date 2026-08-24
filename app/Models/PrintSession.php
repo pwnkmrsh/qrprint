@@ -14,6 +14,10 @@ class PrintSession extends Model
         'completed_files',
         'failed_files',
         'status',
+        'payment_method',
+        'payment_status',
+        'total_amount',
+        'currency',
     ];
 
     protected static function booted(): void

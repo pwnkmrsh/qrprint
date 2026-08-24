@@ -5,7 +5,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, Sid
 import { useLayout } from '@/contexts/LayoutContext';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, FileText, Folder, LayoutGrid, Lock, QrCode, Shield, ShoppingBag, Users } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, Lock, QrCode, Shield, Users, Printer, Store, History } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -13,6 +13,26 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: '/dashboard',
         icon: LayoutGrid,
+    },
+    {
+        title: 'Job History',
+        href: '/shop/jobs',
+        icon: History,
+    },
+    {
+        title: 'Shop Settings',
+        href: '/shop/settings',
+        icon: Store,
+    },
+    {
+        title: 'Printer Settings',
+        href: '/shop/printers',
+        icon: Printer,
+    },
+    {
+        title: 'QR Print',
+        href: '/qr-print',
+        icon: QrCode,
     },
     {
         title: 'Permissions',
@@ -32,37 +52,9 @@ const mainNavItems: NavItem[] = [
         icon: Users,
         permission: 'access-users-module',
     },
-    {
-        title: 'Manage Products',
-        href: '/products',
-        icon: ShoppingBag,
-        permission: 'access-products-module',
-    },
-    {
-        title: 'Manage Categories',
-        href: '/categories',
-        icon: FileText,
-        permission: 'access-categories-module',
-    },
-    {
-        title: 'QR Print',
-        href: '/qr-print',
-        icon: QrCode,
-    },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits',
-        icon: BookOpen,
-    },
-];
+
 
 export function AppSidebar() {
     const { auth } = usePage().props as any;

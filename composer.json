@@ -1,11 +1,12 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "printsetu/app",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "Print Setu - Cloud QR Print Automation Platform",
     "keywords": [
-        "laravel",
-        "framework"
+        "printsetu",
+        "qrprint",
+        "cloud-printing"
     ],
     "license": "MIT",
     "require": {

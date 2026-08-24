@@ -21,6 +21,11 @@ import {
     RotateCw,
     ShieldCheck,
     Sparkles,
+    Store,
+    QrCode,
+    Banknote,
+    Phone,
+    MapPin
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
@@ -34,6 +39,8 @@ export interface SessionJob {
     color_mode: string;
     paper_size: string;
     duplex: string;
+    amount?: number;
+    payment_method?: string;
     selected_sheets: string[] | null;
     status: 'pending' | 'printing' | 'printed' | 'failed' | string;
     attempts: number;
@@ -45,6 +52,10 @@ export interface SessionJob {
 interface SessionData {
     uuid: string;
     status: 'ready' | 'printing' | 'completed' | 'partial_failed' | 'failed' | 'cancelled' | string;
+    payment_method?: string;
+    payment_status?: string;
+    total_amount?: number;
+    currency?: string;
     total_files: number;
     completed_files: number;
     failed_files: number;
@@ -56,6 +67,9 @@ interface SessionStatusProps {
         title: string;
         token: string;
         home_url: string;
+        logo_url?: string | null;
+        mobile_number?: string | null;
+        address?: string | null;
     };
     session: SessionData;
     jobs: SessionJob[];
@@ -79,6 +93,10 @@ export default function SessionStatus({
     const isAllFinished =
         session.status === 'completed' ||
         (session.status === 'failed' && jobs.every((j) => j.status === 'failed' || j.status === 'printed'));
+
+    const sym = session.currency || '₹';
+    const totalAmount = Number(session.total_amount || 0).toFixed(2);
+    const isCounter = (session.payment_method || 'counter') === 'counter';
 
     // Real-time polling
     useEffect(() => {
@@ -144,13 +162,13 @@ export default function SessionStatus({
     const getFileIcon = (type: string) => {
         switch (type) {
             case 'pdf':
-                return <FileText className="size-4 text-red-500" />;
+                return <FileText className="size-4 text-rose-500" />;
             case 'excel':
                 return <FileSpreadsheet className="size-4 text-emerald-600" />;
             case 'image':
-                return <ImageIcon className="size-4 text-blue-500" />;
+                return <ImageIcon className="size-4 text-purple-500" />;
             case 'word':
-                return <FileType2 className="size-4 text-sky-600" />;
+                return <FileType2 className="size-4 text-blue-600" />;
             case 'powerpoint':
                 return <Presentation className="size-4 text-amber-600" />;
             default:
@@ -163,20 +181,26 @@ export default function SessionStatus({
 
     return (
         <>
-            <Head title={`Print Session #${session.uuid.slice(0, 8)} | ${qrPrint.title}`} />
-            <main className="bg-gradient-to-b from-background via-muted/20 to-muted/40 min-h-screen py-8 px-4 sm:px-6 pb-20">
-                <div className="mx-auto max-w-3xl space-y-6">
-                    {/* Header */}
+            <Head title={`Print Status | #${session.uuid.slice(0, 8).toUpperCase()}`} />
+            <main className="bg-gradient-to-b from-background via-muted/20 to-muted/40 min-h-screen py-8 px-4 sm:px-6">
+                <div className="mx-auto max-w-2xl space-y-6">
+                    {/* Header with Shop Details */}
                     <div className="text-center space-y-2">
-                        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
-                            {session.status === 'completed' ? (
-                                <CheckCircle2 className="size-8 text-emerald-500 animate-in zoom-in" />
-                            ) : session.status === 'failed' ? (
-                                <AlertCircle className="size-8 text-destructive" />
-                            ) : (
-                                <Printer className="size-8 animate-pulse text-primary" />
-                            )}
-                        </div>
+                        {qrPrint.logo_url ? (
+                            <div className="mx-auto size-16 rounded-2xl border bg-background p-1.5 shadow-xs flex items-center justify-center">
+                                <img src={qrPrint.logo_url} alt={qrPrint.title} className="size-full object-contain rounded-xl" />
+                            </div>
+                        ) : (
+                            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
+                                {session.status === 'completed' ? (
+                                    <CheckCircle2 className="size-8 text-emerald-500 animate-in zoom-in" />
+                                ) : session.status === 'failed' ? (
+                                    <AlertCircle className="size-8 text-destructive" />
+                                ) : (
+                                    <Printer className="size-8 animate-pulse text-primary" />
+                                )}
+                            </div>
+                        )}
                         <h1 className="text-2xl font-bold tracking-tight text-foreground">
                             {session.status === 'completed'
                                 ? 'Printing Completed Successfully!'
@@ -184,12 +208,43 @@ export default function SessionStatus({
                                   ? 'Printing in Progress…'
                                   : session.status === 'partial_failed'
                                     ? 'Printing Finished with Alerts'
-                                    : 'Print Session Dispatched'}
+                                    : 'Print Order Dispatched'}
                         </h1>
                         <p className="text-muted-foreground text-xs sm:text-sm">
-                            {qrPrint.title} · Session Ref: <span className="font-mono font-semibold text-foreground">#{session.uuid.slice(0, 8).toUpperCase()}</span>
+                            {qrPrint.title} · Order Token: <span className="font-mono font-bold text-foreground">#{session.uuid.slice(0, 8).toUpperCase()}</span>
                         </p>
                     </div>
+
+                    {/* Order & Payment Summary Box */}
+                    <Card className="shadow-xs border bg-primary/5 border-primary/20 overflow-hidden">
+                        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    {isCounter ? (
+                                        <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white gap-1 text-xs">
+                                            <Store className="size-3" /> Pay at Counter (Cash / QR)
+                                        </Badge>
+                                    ) : (
+                                        <Badge className="bg-blue-600 hover:bg-blue-600 text-white gap-1 text-xs">
+                                            <QrCode className="size-3" /> Paid Online
+                                        </Badge>
+                                    )}
+                                    <span className="text-xs text-muted-foreground">
+                                        Status: <strong className="text-foreground capitalize">{session.payment_status?.replace('_', ' ') || 'Pending'}</strong>
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {isCounter
+                                        ? `Please show Token #${session.uuid.slice(0, 8).toUpperCase()} to the cashier and pay ${sym}${totalAmount} when collecting your prints.`
+                                        : `Digital payment verified for ${sym}${totalAmount}. Your printout is spooling directly.`}
+                                </p>
+                            </div>
+                            <div className="text-right sm:text-right shrink-0">
+                                <div className="text-[11px] text-muted-foreground font-medium">Total Amount</div>
+                                <div className="text-2xl font-black text-primary">{sym}{totalAmount}</div>
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     {/* Overall Progress Card */}
                     <Card className="shadow-xs border overflow-hidden">
@@ -203,9 +258,9 @@ export default function SessionStatus({
                                     variant={
                                         session.status === 'completed'
                                             ? 'default'
-                                            : session.status === 'failed'
-                                              ? 'destructive'
-                                              : 'secondary'
+                                             : session.status === 'failed'
+                                               ? 'destructive'
+                                               : 'secondary'
                                     }
                                     className="capitalize text-xs font-semibold py-1 px-2.5"
                                 >
@@ -281,7 +336,9 @@ export default function SessionStatus({
                                                         <span>· {job.copies} {job.copies === 1 ? 'copy' : 'copies'}</span>
                                                         <span>· {job.paper_size}</span>
                                                         <span>· {job.color_mode === 'bw' ? 'B&W' : 'Color'}</span>
-                                                        <span className="capitalize">· {job.orientation}</span>
+                                                        {job.amount && (
+                                                            <span className="font-bold text-foreground">· {sym}{Number(job.amount).toFixed(2)}</span>
+                                                        )}
                                                     </div>
 
                                                     {/* Error detail if failed */}
@@ -345,7 +402,7 @@ export default function SessionStatus({
                                         All documents have been printed!
                                     </div>
                                     <p className="text-xs leading-relaxed text-emerald-800 dark:text-emerald-300">
-                                        Your {session.total_files} print jobs were successfully executed on the local printer hardware. Please collect your printed sheets from the counter.
+                                        Your {session.total_files} print jobs were successfully executed. {isCounter ? `Please pay ${sym}${totalAmount} and collect your sheets at the counter.` : 'Please collect your sheets from the printer output tray.'}
                                     </p>
                                 </div>
                             )}

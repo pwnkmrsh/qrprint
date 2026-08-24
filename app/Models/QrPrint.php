@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 class QrPrint extends Model
 {
     protected $fillable = [
+        'user_id',
         'uuid',
         'title',
         'print_token',
@@ -16,6 +17,11 @@ class QrPrint extends Model
         'print_count',
         'last_printed_at',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
     protected static function booted(): void
     {
@@ -41,5 +47,20 @@ class QrPrint extends Model
     public function sessions()
     {
         return $this->hasMany(PrintSession::class);
+    }
+
+    public function printers()
+    {
+        return $this->hasMany(Printer::class);
+    }
+
+    public function auditLogs()
+    {
+        return $this->hasMany(PrinterAuditLog::class);
+    }
+
+    public function shopSetting()
+    {
+        return $this->hasOne(ShopSetting::class);
     }
 }

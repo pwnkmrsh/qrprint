@@ -22,6 +22,8 @@ class PrintJob extends Model
         'selected_sheets',
         'print_options',
         'status',
+        'payment_method',
+        'amount',
         'attempts',
         'error_message',
         'claimed_at',

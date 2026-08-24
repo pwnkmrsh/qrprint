@@ -30,6 +30,11 @@ interface PaymentProps {
     shop: {
         name: string;
         slug: string;
+        online_payment_enabled?: boolean;
+        counter_payment_enabled?: boolean;
+        show_currency?: boolean;
+        currency_symbol?: string;
+        payment_modes?: string[];
     };
     documents: DocumentItem[];
     config: {
@@ -55,7 +60,11 @@ export default function Payment({
     checkout_url,
     configure_url,
 }: PaymentProps) {
-    const [paymentMethod, setPaymentMethod] = useState<'counter' | 'upi'>('counter');
+    const sym = shop.show_currency !== false ? (shop.currency_symbol || '₹') : '';
+    const canCounter = shop.counter_payment_enabled !== false;
+    const canOnline = shop.online_payment_enabled !== false;
+
+    const [paymentMethod, setPaymentMethod] = useState<'counter' | 'upi'>(canCounter ? 'counter' : 'upi');
 
     const { data, post, processing, errors } = useForm({
         documents: documents.map((d) => d.id),
@@ -183,7 +192,7 @@ export default function Payment({
                                     </CardContent>
                                 </Card>
 
-                                {/* Payment Method Selection */}
+                                 {/* Payment Method Selection */}
                                 <Card className="shadow-xs border">
                                     <CardHeader className="pb-3">
                                         <CardTitle className="text-base flex items-center gap-2">
@@ -193,79 +202,83 @@ export default function Payment({
                                     </CardHeader>
                                     <CardContent className="space-y-3">
                                         {/* Option 1: Pay at Counter */}
-                                        <label
-                                            onClick={() => setPaymentMethod('counter')}
-                                            className={`relative flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-all ${
-                                                paymentMethod === 'counter'
-                                                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                                                    : 'border-input bg-card hover:bg-muted/30'
-                                            }`}
-                                        >
-                                            <input
-                                                type="radio"
-                                                name="payment_method"
-                                                value="counter"
-                                                checked={paymentMethod === 'counter'}
-                                                onChange={() => setPaymentMethod('counter')}
-                                                className="sr-only"
-                                            />
-                                            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                                <Store className="size-5" />
-                                            </div>
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-semibold text-sm text-foreground">
-                                                        Pay at Shop Counter (Cash / QR)
-                                                    </span>
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="text-[10px] bg-primary/10 text-primary font-medium"
-                                                    >
-                                                        Recommended
-                                                    </Badge>
+                                        {canCounter && (
+                                            <label
+                                                onClick={() => setPaymentMethod('counter')}
+                                                className={`relative flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-all ${
+                                                    paymentMethod === 'counter'
+                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                        : 'border-input bg-card hover:bg-muted/30'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="payment_method"
+                                                    value="counter"
+                                                    checked={paymentMethod === 'counter'}
+                                                    onChange={() => setPaymentMethod('counter')}
+                                                    className="sr-only"
+                                                />
+                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                    <Store className="size-5" />
                                                 </div>
-                                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                                    Sends job directly to the shop printer right now.
-                                                    You can pay in cash or via counter UPI when
-                                                    collecting your print.
-                                                </p>
-                                            </div>
-                                        </label>
+                                                <div className="flex-1 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-semibold text-sm text-foreground">
+                                                            Pay at Shop Counter (Cash / QR)
+                                                        </span>
+                                                        <Badge
+                                                            variant="secondary"
+                                                            className="text-[10px] bg-primary/10 text-primary font-medium"
+                                                        >
+                                                            Recommended
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                                        Sends job directly to the shop printer right now.
+                                                        You can pay in cash or via counter UPI when
+                                                        collecting your print.
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        )}
 
-                                        {/* Option 2: Instant UPI Payment */}
-                                        <label
-                                            onClick={() => setPaymentMethod('upi')}
-                                            className={`relative flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-all ${
-                                                paymentMethod === 'upi'
-                                                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                                                    : 'border-input bg-card hover:bg-muted/30'
-                                            }`}
-                                        >
-                                            <input
-                                                type="radio"
-                                                name="payment_method"
-                                                value="upi"
-                                                checked={paymentMethod === 'upi'}
-                                                onChange={() => setPaymentMethod('upi')}
-                                                className="sr-only"
-                                            />
-                                            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                                <QrCode className="size-5" />
-                                            </div>
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-semibold text-sm text-foreground">
-                                                        Direct UPI Payment
-                                                    </span>
-                                                    <span className="text-[11px] text-muted-foreground">
-                                                        GPay · PhonePe · Paytm
-                                                    </span>
+                                        {/* Option 2: Instant Online/UPI Payment */}
+                                        {canOnline && (
+                                            <label
+                                                onClick={() => setPaymentMethod('upi')}
+                                                className={`relative flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-all ${
+                                                    paymentMethod === 'upi'
+                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                        : 'border-input bg-card hover:bg-muted/30'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="payment_method"
+                                                    value="upi"
+                                                    checked={paymentMethod === 'upi'}
+                                                    onChange={() => setPaymentMethod('upi')}
+                                                    className="sr-only"
+                                                />
+                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                    <QrCode className="size-5" />
                                                 </div>
-                                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                                    Pay digitally and queue print job automatically.
-                                                </p>
-                                            </div>
-                                        </label>
+                                                <div className="flex-1 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-semibold text-sm text-foreground">
+                                                            Direct Online / UPI Payment
+                                                        </span>
+                                                        <span className="text-[11px] text-muted-foreground">
+                                                            GPay · PhonePe · Paytm · Cards
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                                        Pay digitally and queue print job automatically.
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        )}
 
                                         {/* Quick notice */}
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
@@ -313,7 +326,7 @@ export default function Payment({
                                             <div className="flex justify-between text-muted-foreground">
                                                 <span>Rate per page</span>
                                                 <span className="font-medium text-foreground">
-                                                    ₹{pricing.rate}
+                                                    {sym}{pricing.rate}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between text-muted-foreground">
@@ -335,7 +348,7 @@ export default function Payment({
                                                 </span>
                                             </div>
                                             <span className="text-3xl font-extrabold text-primary">
-                                                ₹{pricing.subtotal}
+                                                {sym}{pricing.subtotal}
                                             </span>
                                         </div>
 

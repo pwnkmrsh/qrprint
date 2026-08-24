@@ -46,4 +46,19 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function qrPrint()
+    {
+        return $this->hasOne(QrPrint::class);
+    }
+
+    public function qrPrints()
+    {
+        return $this->hasMany(QrPrint::class);
+    }
+
+    public function shopSetting()
+    {
+        return $this->hasOne(ShopSetting::class);
+    }
 }
