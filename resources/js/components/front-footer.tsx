@@ -28,7 +28,7 @@ export default function FrontFooter() {
                             <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md shadow-primary/20">
                                 <QrCode className="h-5 w-5" />
                             </div>
-                            <span className="font-extrabold text-xl tracking-tight">QR Se Print</span>
+                            <span className="font-extrabold text-xl tracking-tight">QRPrintSetu</span>
                         </a>
                         <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
                             Next-generation QR code print automation software for Indian cyber cafes, stationery shops, and campus Xerox centers. Zero WhatsApp queues, automated UPI payments, and direct Windows spooling.
@@ -57,6 +57,15 @@ export default function FrontFooter() {
                                     className="text-muted-foreground hover:text-foreground transition-colors"
                                 >
                                     Home
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href="#how-it-works"
+                                    onClick={(e) => scrollToSection(e, '#how-it-works')}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    How It Works
                                 </a>
                             </li>
                             <li>
@@ -97,15 +106,6 @@ export default function FrontFooter() {
                         <ul className="space-y-2.5 text-sm">
                             <li>
                                 <a
-                                    href="#about"
-                                    onClick={(e) => scrollToSection(e, '#about')}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    About Us
-                                </a>
-                            </li>
-                            <li>
-                                <a
                                     href="#partner-program"
                                     onClick={(e) => scrollToSection(e, '#partner-program')}
                                     className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline flex items-center gap-1"
@@ -127,7 +127,7 @@ export default function FrontFooter() {
                             </li>
                             <li>
                                 <a
-                                    href="https://wa.me/919999999999"
+                                    href="https://wa.me/919098132966"
                                     target="_blank"
                                     rel="noreferrer"
                                     className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
@@ -146,12 +146,14 @@ export default function FrontFooter() {
                         <ul className="space-y-2.5 text-sm">
                             <li>
                                 <a
-                                    href="#declaration"
-                                    onClick={(e) => scrollToSection(e, '#declaration')}
+                                    href="/security-declaration"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                     className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
                                 >
                                     <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                                     <span>Declaration & Privacy</span>
+                                    <ArrowUpRight className="h-3 w-3 text-muted-foreground/60" />
                                 </a>
                             </li>
                             <li>
@@ -165,15 +167,30 @@ export default function FrontFooter() {
 
                 {/* Bottom Bar */}
                 <div className="pt-8 border-t border-border/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-                    <p>© {new Date().getFullYear()} QR Se Print. Built for India's Print Shop Revolution.</p>
+                    <p>© {new Date().getFullYear()} QRPrintSetu. Built for India's Print Shop Revolution.</p>
                     <div className="flex items-center gap-6">
-                        <a href="#declaration" onClick={(e) => scrollToSection(e, '#declaration')} className="hover:underline">
+                        <a
+                            href="/privacy-policy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:underline hover:text-foreground transition-colors"
+                        >
                             Privacy Policy
                         </a>
-                        <a href="#declaration" onClick={(e) => scrollToSection(e, '#declaration')} className="hover:underline">
+                        <a
+                            href="/terms-of-service"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:underline hover:text-foreground transition-colors"
+                        >
                             Terms of Service
                         </a>
-                        <a href="#declaration" onClick={(e) => scrollToSection(e, '#declaration')} className="hover:underline">
+                        <a
+                            href="/security-declaration"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:underline hover:text-foreground transition-colors"
+                        >
                             Security Declaration
                         </a>
                     </div>

@@ -14,6 +14,18 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
+Route::get('/privacy-policy', function () {
+    return Inertia::render('privacy-policy');
+})->name('privacy-policy');
+
+Route::get('/terms-of-service', function () {
+    return Inertia::render('terms-of-service');
+})->name('terms-of-service');
+
+Route::get('/security-declaration', function () {
+    return Inertia::render('security-declaration');
+})->name('security-declaration');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
