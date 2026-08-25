@@ -15,6 +15,7 @@ use App\Models\Permission;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
@@ -25,16 +26,19 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // 1. Reset/Clear Tables
-        DB::statement('PRAGMA foreign_keys = OFF;');
-        DB::table('users')->truncate();
-        DB::table('qr_prints')->truncate();
-        DB::table('shop_settings')->truncate();
-        DB::table('printers')->truncate();
-        DB::table('printer_audit_logs')->truncate();
-        DB::table('print_documents')->truncate();
-        DB::table('print_sessions')->truncate();
-        DB::table('print_jobs')->truncate();
-        DB::statement('PRAGMA foreign_keys = ON;');
+        Schema::disableForeignKeyConstraints();
+        DB::table('menu_items')->delete();
+        DB::table('menus')->delete();
+        DB::table('pages')->delete();
+        DB::table('print_jobs')->delete();
+        DB::table('print_sessions')->delete();
+        DB::table('print_documents')->delete();
+        DB::table('printer_audit_logs')->delete();
+        DB::table('printers')->delete();
+        DB::table('shop_settings')->delete();
+        DB::table('qr_prints')->delete();
+        DB::table('users')->delete();
+        Schema::enableForeignKeyConstraints();
 
         // 2. Ensure default legacy roles exist
         $legacyRoles = ['super-admin', 'admin', 'editor', 'user'];
@@ -53,12 +57,12 @@ class DatabaseSeeder extends Seeder
         $usersConfig = [
             [
                 'name' => 'Central Super Admin',
-                'email' => 'superadmin@example.com',
-                'password' => 'password',
+                'email' => 'pwnkmrsh@gmail.com',
+                'password' => 'Qaws@123',
                 'roles' => ['super-admin', 'SUPER ADMIN']
             ],
             [
-                'name' => 'Pawan Shop Owner',
+                'name' => 'Shop Owner',
                 'email' => 'owner@example.com',
                 'password' => 'password',
                 'roles' => ['admin', 'SHOP OWNER']
@@ -353,5 +357,8 @@ class DatabaseSeeder extends Seeder
             'Default printer changed',
             "Set '{$printer1->name}' as default shop printer"
         );
+
+        // 8. Seed CMS Pages, Menus & RBAC Permissions
+        $this->call(PageAndMenuSeeder::class);
     }
 }

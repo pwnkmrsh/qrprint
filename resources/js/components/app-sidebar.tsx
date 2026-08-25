@@ -5,7 +5,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, Sid
 import { useLayout } from '@/contexts/LayoutContext';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Lock, QrCode, Shield, Users, Printer, Store, History } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, Lock, QrCode, Shield, Users, Printer, Store, History, FileText, Menu } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -33,6 +33,18 @@ const mainNavItems: NavItem[] = [
         title: 'QR Print',
         href: '/qr-print',
         icon: QrCode,
+    },
+    {
+        title: 'Pages (CMS)',
+        href: '/pages',
+        icon: FileText,
+        permission: 'access-pages-module',
+    },
+    {
+        title: 'Menu Manager',
+        href: '/menus',
+        icon: Menu,
+        permission: 'access-menus-module',
     },
     {
         title: 'Permissions',

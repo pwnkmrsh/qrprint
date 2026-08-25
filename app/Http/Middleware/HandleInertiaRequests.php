@@ -51,6 +51,27 @@ class HandleInertiaRequests extends Middleware
                  ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
+            'navigation_menus' => fn() => \Illuminate\Support\Facades\Schema::hasTable('menus')
+                ? \App\Models\Menu::with(['activeItems.page'])
+                    ->where('is_active', true)
+                    ->get()
+                    ->keyBy('location')
+                    ->map(fn($menu) => [
+                        'id' => $menu->id,
+                        'name' => $menu->name,
+                        'location' => $menu->location,
+                        'items' => $menu->activeItems->map(fn($item) => [
+                            'id' => $item->id,
+                            'title' => $item->title,
+                            'url_type' => $item->url_type,
+                            'url' => $item->effective_url,
+                            'icon' => $item->icon,
+                            'badge' => $item->badge,
+                            'target' => $item->target,
+                            'order' => $item->order,
+                        ]),
+                    ])
+                : [],
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error'   => $request->session()->get('error'),

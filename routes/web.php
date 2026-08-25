@@ -13,6 +13,9 @@ use App\Http\Controllers\PrinterController;
 use App\Http\Controllers\ShopSettingController;
 use App\Http\Controllers\PrintJobHistoryController;
 use App\Http\Controllers\Api\PrintAgentController;
+use App\Http\Controllers\PageController;
+use App\Http\Controllers\MenuController;
+use App\Http\Controllers\PublicPageController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -88,6 +91,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('permissions', PermissionController::class)->middleware('permission:access-permissions-module');
     Route::resource('roles', RoleController::class)->middleware('permission:access-roles-module');
     Route::resource('users', UserController::class)->middleware('permission:access-users-module');
+
+    // CMS Pages Management
+    Route::post('pages/{page}/toggle-status', [PageController::class, 'toggleStatus'])
+        ->name('pages.toggle-status')
+        ->middleware('permission:page.publish');
+    Route::resource('pages', PageController::class)->except(['show'])->middleware('permission:access-pages-module');
+
+    // Menus Management
+    Route::get('menus', [MenuController::class, 'index'])
+        ->name('menus.index')
+        ->middleware('permission:access-menus-module');
+    Route::post('menus/items', [MenuController::class, 'storeItem'])
+        ->name('menus.items.store')
+        ->middleware('permission:menu.create');
+    Route::patch('menus/items/{item}', [MenuController::class, 'updateItem'])
+        ->name('menus.items.update')
+        ->middleware('permission:menu.edit');
+    Route::delete('menus/items/{item}', [MenuController::class, 'destroyItem'])
+        ->name('menus.items.destroy')
+        ->middleware('permission:menu.delete');
+    Route::post('menus/reorder', [MenuController::class, 'reorderItems'])
+        ->name('menus.items.reorder')
+        ->middleware('permission:menu.edit');
+
     Route::get('qr-print', [QrPrintController::class, 'index'])
         ->name('qr-print.index');
 
@@ -97,6 +124,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('qr-print/{qrPrint}/qr', [QrPrintController::class, 'qr'])
         ->name('qr-print.qr');
 });
+
+// Dynamic Public CMS Pages
+Route::get('/p/{slug}', [PublicPageController::class, 'show'])->name('pages.show');
 
 /*
 |--------------------------------------------------------------------------

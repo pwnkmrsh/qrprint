@@ -1,9 +1,34 @@
+import { usePage } from '@inertiajs/react';
 import { QrCode, Heart, ShieldCheck, Mail, Phone, MessageSquare, ArrowUpRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AppLogo from '@/components/app-logo';
 
 export default function FrontFooter() {
-    const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    const pageProps = usePage().props as any;
+    const menus = pageProps?.navigation_menus || {};
+
+    const productItems = menus.footer_product?.items || [
+        { title: 'Home', url: '#home', target: '_self' },
+        { title: 'How It Works', url: '#how-it-works', target: '_self' },
+        { title: 'Features', url: '#feature', target: '_self', hasSparkle: true },
+        { title: 'How to Setup', url: '#how-to-setup', target: '_self' },
+        { title: 'Pricing Plans', url: '#pricing', target: '_self' },
+    ];
+
+    const companyItems = menus.footer_company?.items || [
+        { title: 'Partner Program', url: '#partner-program', badge: '30%', target: '_self' },
+        { title: 'Contact Us', url: '#contact', target: '_self' },
+        { title: 'WhatsApp Support', url: 'https://wa.me/919098132966', target: '_blank' },
+    ];
+
+    const trustItems = menus.footer_trust?.items || [
+        { title: 'Declaration & Privacy', url: '/security-declaration', target: '_blank' },
+        { title: 'Privacy Policy', url: '/privacy-policy', target: '_blank' },
+        { title: 'Terms of Service', url: '/terms-of-service', target: '_blank' },
+    ];
+
+    const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string, target?: string) => {
+        if (target === '_blank') return;
         if (href.startsWith('#')) {
             e.preventDefault();
             const targetId = href.replace('#', '');
@@ -11,6 +36,8 @@ export default function FrontFooter() {
             if (targetElement) {
                 targetElement.scrollIntoView({ behavior: 'smooth' });
                 window.history.pushState(null, '', href);
+            } else {
+                window.location.href = '/' + href;
             }
         }
     };
@@ -48,52 +75,24 @@ export default function FrontFooter() {
                             Product
                         </h4>
                         <ul className="space-y-2.5 text-sm">
-                            <li>
-                                <a
-                                    href="#home"
-                                    onClick={(e) => scrollToSection(e, '#home')}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    Home
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#how-it-works"
-                                    onClick={(e) => scrollToSection(e, '#how-it-works')}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    How It Works
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#feature"
-                                    onClick={(e) => scrollToSection(e, '#feature')}
-                                    className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                                >
-                                    <span>Features</span>
-                                    <Sparkles className="h-3 w-3 text-amber-500" />
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#how-to-setup"
-                                    onClick={(e) => scrollToSection(e, '#how-to-setup')}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    How to Setup
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#pricing"
-                                    onClick={(e) => scrollToSection(e, '#pricing')}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    Pricing Plans
-                                </a>
-                            </li>
+                            {productItems.map((item: any) => (
+                                <li key={item.title}>
+                                    <a
+                                        href={item.url}
+                                        target={item.target}
+                                        onClick={(e) => scrollToSection(e, item.url, item.target)}
+                                        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                                    >
+                                        <span>{item.title}</span>
+                                        {item.hasSparkle && <Sparkles className="h-3 w-3 text-amber-500" />}
+                                        {item.badge && (
+                                            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary border border-primary/20 font-bold">
+                                                {item.badge}
+                                            </span>
+                                        )}
+                                    </a>
+                                </li>
+                            ))}
                         </ul>
                     </div>
 
@@ -102,38 +101,24 @@ export default function FrontFooter() {
                             Company & Partner
                         </h4>
                         <ul className="space-y-2.5 text-sm">
-                            <li>
-                                <a
-                                    href="#partner-program"
-                                    onClick={(e) => scrollToSection(e, '#partner-program')}
-                                    className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline flex items-center gap-1"
-                                >
-                                    <span>Partner Program</span>
-                                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 border border-emerald-500/20 font-bold">
-                                        30%
-                                    </span>
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#contact"
-                                    onClick={(e) => scrollToSection(e, '#contact')}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    Contact Us
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="https://wa.me/919098132966"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                                >
-                                    <span>WhatsApp Support</span>
-                                    <ArrowUpRight className="h-3 w-3" />
-                                </a>
-                            </li>
+                            {companyItems.map((item: any) => (
+                                <li key={item.title}>
+                                    <a
+                                        href={item.url}
+                                        target={item.target}
+                                        onClick={(e) => scrollToSection(e, item.url, item.target)}
+                                        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+                                    >
+                                        <span>{item.title}</span>
+                                        {item.badge && (
+                                            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold">
+                                                {item.badge}
+                                            </span>
+                                        )}
+                                        {item.target === '_blank' && <ArrowUpRight className="h-3 w-3 text-muted-foreground/60" />}
+                                    </a>
+                                </li>
+                            ))}
                         </ul>
                     </div>
 
@@ -142,18 +127,20 @@ export default function FrontFooter() {
                             Trust & Security
                         </h4>
                         <ul className="space-y-2.5 text-sm">
-                            <li>
-                                <a
-                                    href="/security-declaration"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                                >
-                                    <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                                    <span>Declaration & Privacy</span>
-                                    <ArrowUpRight className="h-3 w-3 text-muted-foreground/60" />
-                                </a>
-                            </li>
+                            {trustItems.map((item: any) => (
+                                <li key={item.title}>
+                                    <a
+                                        href={item.url}
+                                        target={item.target}
+                                        onClick={(e) => scrollToSection(e, item.url, item.target)}
+                                        className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                                    >
+                                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                                        <span>{item.title}</span>
+                                        {item.target === '_blank' && <ArrowUpRight className="h-3 w-3 text-muted-foreground/60" />}
+                                    </a>
+                                </li>
+                            ))}
                             <li>
                                 <span className="text-muted-foreground text-xs block leading-relaxed mt-2 p-2.5 rounded-lg bg-muted/60 border border-border/60">
                                     Files are auto-purged immediately after printing. No logs, no data retention.

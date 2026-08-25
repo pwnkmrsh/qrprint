@@ -170,7 +170,7 @@ export default function Welcome() {
 
                 <main className="grow">
                     {/* SECTION 1: HOME (HERO - 2 COLUMN VERTICAL SPLIT) */}
-                    <section id="home" className="relative pt-28 pb-16 md:pt-36 md:pb-24 overflow-hidden bg-background">
+                    <section id="home" className="scroll-mt-20 relative pt-28 pb-16 md:pt-36 md:pb-24 overflow-hidden bg-background">
                         {/* Background Glow Orbs */}
                         <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[350px] bg-primary/15 blur-[130px] rounded-full pointer-events-none -z-10" />
                         <div className="absolute top-1/3 right-10 w-[450px] h-[350px] bg-primary/10 blur-[130px] rounded-full pointer-events-none -z-10" />
@@ -524,7 +524,7 @@ export default function Welcome() {
                     </section>
 
                     {/* SECTION 2: HOW IT WORKS (CUSTOMER 5 STEPS HIGHLIGHT) */}
-                    <section id="how-it-works" className="py-24 relative overflow-hidden bg-card border-y border-border">
+                    <section id="how-it-works" className="scroll-mt-20 py-24 relative overflow-hidden bg-card border-y border-border">
                         {/* Ambient Glows */}
                         <div className="absolute top-1/2 left-0 -translate-y-1/2 w-96 h-96 bg-primary/10 blur-[140px] rounded-full pointer-events-none -z-10" />
                         <div className="absolute top-1/3 right-0 w-96 h-96 bg-primary/10 blur-[140px] rounded-full pointer-events-none -z-10" />
@@ -707,7 +707,7 @@ export default function Welcome() {
                     </section>
 
                     {/* SECTION 2: FEATURE */}
-                    <section id="feature" className="py-20 bg-background border-y border-border">
+                    <section id="feature" className="scroll-mt-20 py-20 bg-background border-y border-border">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
                                 <Badge variant="secondary" className="px-3 py-1 bg-primary/10 text-primary border-primary/20">
@@ -793,7 +793,7 @@ export default function Welcome() {
                     </section>
 
                     {/* SECTION 3: HOW TO SETUP */}
-                    <section id="how-to-setup" className="py-20 bg-card">
+                    <section id="how-to-setup" className="scroll-mt-20 py-20 bg-card">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
                                 <Badge variant="secondary" className="px-3 py-1 bg-primary/10 text-primary border-primary/20">
@@ -886,7 +886,7 @@ export default function Welcome() {
                     </section>
 
                     {/* SECTION 4: PRICING */}
-                    <section id="pricing" className="py-20 bg-background border-y border-border">
+                    <section id="pricing" className="scroll-mt-20 py-20 bg-background border-y border-border">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
                                 <Badge variant="secondary" className="px-3 py-1 bg-primary/10 text-primary border-primary/20">
@@ -1050,11 +1050,18 @@ export default function Welcome() {
                                         </ul>
                                     </div>
                                     <div className="pt-8">
-                                        <a href="#contact">
-                                            <Button variant="outline" className="w-full font-semibold border-border bg-card hover:bg-muted text-foreground">
+                                        <Button asChild variant="outline" className="w-full font-semibold border-border bg-card hover:bg-muted text-foreground">
+                                            <a
+                                                href="#contact"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' });
+                                                    window.history.pushState(null, '', '#contact');
+                                                }}
+                                            >
                                                 Contact Enterprise Sales
-                                            </Button>
-                                        </a>
+                                            </a>
+                                        </Button>
                                     </div>
                                 </Card>
                             </div>
@@ -1062,7 +1069,7 @@ export default function Welcome() {
                     </section>
 
                     {/* SECTION 5: PARTNER PROGRAM */}
-                    <section id="partner-program" className="py-20 bg-card">
+                    <section id="partner-program" className="scroll-mt-20 py-20 bg-card">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
                                 {/* Left Info */}
@@ -1210,7 +1217,7 @@ export default function Welcome() {
                     </section>
 
                     {/* SECTION 6: DECLARATION */}
-                    <section id="declaration" className="py-20 bg-background border-t border-border">
+                    <section id="declaration" className="scroll-mt-20 py-20 bg-background border-t border-border">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
                                 <Badge variant="outline" className="px-3 py-1 text-primary border-primary/20 bg-primary/10 font-semibold">
@@ -1313,7 +1320,7 @@ export default function Welcome() {
                     </section>
 
                     {/* SECTION 7: CONTACT US */}
-                    <section id="contact" className="py-20 bg-muted/40 border-t border-border">
+                    <section id="contact" className="scroll-mt-20 py-20 bg-muted/40 border-t border-border">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
                                 <Badge variant="secondary" className="px-3 py-1 bg-primary/10 text-primary border-primary/20">

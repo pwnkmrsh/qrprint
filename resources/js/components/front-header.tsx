@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     Home,
     CircleDollarSign,
@@ -13,16 +13,44 @@ import {
     LayoutDashboard,
     LogIn,
     ChevronRight,
+    ShieldCheck,
+    FileText,
+    Lock,
+    Phone,
+    HelpCircle,
+    Layers,
+    Zap,
+    Store,
+    Users,
 } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import AppLogo from '@/components/app-logo';
+
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    Home,
+    Sparkles,
+    CircleDollarSign,
+    Settings2,
+    Mail,
+    ShieldCheck,
+    FileText,
+    Lock,
+    Phone,
+    HelpCircle,
+    Layers,
+    Zap,
+    Store,
+    Users,
+    QrCode,
+};
 
 interface NavItem {
     name: string;
     href: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: string;
+    target?: string;
 }
 
 export const FRONT_NAV_ITEMS: NavItem[] = [
@@ -45,9 +73,42 @@ interface FrontHeaderProps {
 }
 
 export default function FrontHeader({ auth }: FrontHeaderProps) {
+    const pageProps = usePage().props as any;
+    const dynamicHeaderItems = pageProps?.navigation_menus?.header?.items || [];
+
+    const navItems: NavItem[] = dynamicHeaderItems.length > 0
+        ? dynamicHeaderItems.map((item: any) => ({
+            name: item.title,
+            href: item.url,
+            icon: item.icon && ICON_MAP[item.icon] ? ICON_MAP[item.icon] : Sparkles,
+            badge: item.badge,
+            target: item.target || '_self',
+        }))
+        : FRONT_NAV_ITEMS;
+
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [activeSection, setActiveSection] = useState('home');
+
+    // Handle scroll to hash on initial load or hash change
+    useEffect(() => {
+        const scrollToHash = () => {
+            if (window.location.hash) {
+                const targetId = window.location.hash.replace('#', '');
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    setTimeout(() => {
+                        targetElement.scrollIntoView({ behavior: 'smooth' });
+                        setActiveSection(targetId);
+                    }, 150);
+                }
+            }
+        };
+
+        scrollToHash();
+        window.addEventListener('hashchange', scrollToHash);
+        return () => window.removeEventListener('hashchange', scrollToHash);
+    }, []);
 
     // Handle scroll effects & active section detection
     useEffect(() => {
@@ -56,7 +117,7 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
 
             // Determine active section
             const sections = FRONT_NAV_ITEMS.map((item) => item.href.replace('#', ''));
-            const scrollPosition = window.scrollY + 100;
+            const scrollPosition = window.scrollY + 120;
 
             for (let i = sections.length - 1; i >= 0; i--) {
                 const section = document.getElementById(sections[i]);
@@ -86,7 +147,8 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
         return () => { document.body.style.overflow = ''; };
     }, [mobileMenuOpen]);
 
-    const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string, target?: string) => {
+        if (target === '_blank') return;
         if (href.startsWith('#')) {
             e.preventDefault();
             const targetId = href.replace('#', '');
@@ -96,6 +158,9 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
                 setActiveSection(targetId);
                 setMobileMenuOpen(false);
                 window.history.pushState(null, '', href);
+            } else {
+                // If the element doesn't exist on this page (e.g. on /privacy-policy), navigate to home with hash
+                window.location.href = '/' + href;
             }
         }
     };
@@ -122,20 +187,26 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
 
                     {/* ── Desktop Navigation (xl+) ── */}
                     <nav className="hidden xl:flex items-center gap-0.5">
-                        {FRONT_NAV_ITEMS.map((item) => {
+                        {navItems.map((item) => {
                             const isCurrent = activeSection === item.href.replace('#', '');
                             return (
                                 <a
                                     key={item.name}
                                     href={item.href}
-                                    onClick={(e) => scrollToSection(e, item.href)}
-                                    className={`relative px-3 py-2 text-[13px] font-medium rounded-lg transition-colors duration-150 ${
+                                    target={item.target}
+                                    onClick={(e) => scrollToSection(e, item.href, item.target)}
+                                    className={`relative px-3 py-2 text-[13px] font-medium rounded-lg transition-colors duration-150 flex items-center gap-1.5 ${
                                         isCurrent
                                             ? 'text-primary bg-primary/[0.06] font-semibold'
                                             : 'text-gray-600 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground hover:bg-gray-100/60 dark:hover:bg-muted/60'
                                     }`}
                                 >
-                                    {item.name}
+                                    <span>{item.name}</span>
+                                    {item.badge && (
+                                        <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-primary/15 text-primary border border-primary/20">
+                                            {item.badge}
+                                        </span>
+                                    )}
                                     {/* Active indicator dot */}
                                     {isCurrent && (
                                         <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-[3px] w-4 rounded-full bg-primary" />
@@ -147,20 +218,26 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
 
                     {/* ── Tablet Navigation (lg to xl) ── */}
                     <nav className="hidden lg:flex xl:hidden items-center gap-0.5">
-                        {FRONT_NAV_ITEMS.map((item) => {
+                        {navItems.map((item) => {
                             const isCurrent = activeSection === item.href.replace('#', '');
                             return (
                                 <a
                                     key={item.name}
                                     href={item.href}
-                                    onClick={(e) => scrollToSection(e, item.href)}
-                                    className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 ${
+                                    target={item.target}
+                                    onClick={(e) => scrollToSection(e, item.href, item.target)}
+                                    className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors duration-150 flex items-center gap-1 ${
                                         isCurrent
                                             ? 'text-primary bg-primary/[0.06] font-semibold'
                                             : 'text-gray-500 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground'
                                     }`}
                                 >
-                                    {item.name}
+                                    <span>{item.name}</span>
+                                    {item.badge && (
+                                        <span className="text-[9px] px-1 py-0.2 rounded-full font-bold bg-primary/15 text-primary">
+                                            {item.badge}
+                                        </span>
+                                    )}
                                 </a>
                             );
                         })}
@@ -180,7 +257,7 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
                             <>
                                 <Link
                                     href="/login"
-                                    className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-9 gap-1.5 font-medium text-gray-600 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground hover:bg-gray-100/80 dark:hover:bg-muted rounded-lg hidden sm:inline-flex')}
+                                    className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-9 px-2.5 sm:px-3 gap-1.5 font-medium text-gray-600 dark:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground hover:bg-gray-100/80 dark:hover:bg-muted rounded-lg inline-flex')}
                                 >
                                     <LogIn className="h-4 w-4" />
                                     <span>Login</span>
@@ -226,14 +303,15 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
                                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-muted-foreground px-3 pb-2">
                                     Navigate
                                 </p>
-                                {FRONT_NAV_ITEMS.map((item) => {
+                                {navItems.map((item) => {
                                     const Icon = item.icon;
                                     const isCurrent = activeSection === item.href.replace('#', '');
                                     return (
                                         <a
                                             key={item.name}
                                             href={item.href}
-                                            onClick={(e) => scrollToSection(e, item.href)}
+                                            target={item.target}
+                                            onClick={(e) => scrollToSection(e, item.href, item.target)}
                                             className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
                                                 isCurrent
                                                     ? 'bg-primary/[0.06] text-primary font-semibold'
@@ -243,6 +321,11 @@ export default function FrontHeader({ auth }: FrontHeaderProps) {
                                             <div className="flex items-center gap-3">
                                                 <Icon className={`h-4 w-4 ${isCurrent ? 'text-primary' : 'text-gray-400 dark:text-muted-foreground'}`} />
                                                 <span>{item.name}</span>
+                                                {item.badge && (
+                                                    <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-primary/15 text-primary border border-primary/20">
+                                                        {item.badge}
+                                                    </span>
+                                                )}
                                             </div>
                                             <ChevronRight className={`h-4 w-4 ${isCurrent ? 'text-primary/60' : 'text-gray-300 dark:text-muted-foreground/50'}`} />
                                         </a>
