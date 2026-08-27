@@ -22,7 +22,11 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'google_id',
+        'avatar',
+        'email_verified_at',
     ];
+
 
     /**
      * The attributes that should be hidden for serialization.
@@ -47,6 +51,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function shop()
+    {
+        return $this->hasOne(Shop::class);
+    }
+
     public function qrPrint()
     {
         return $this->hasOne(QrPrint::class);
@@ -62,3 +71,4 @@ class User extends Authenticatable
         return $this->hasOne(ShopSetting::class);
     }
 }
+

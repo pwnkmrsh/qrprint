@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PrintAgentController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\PublicPageController;
+use App\Http\Controllers\ShopRegistrationController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -34,7 +35,13 @@ Route::get('/security-declaration', function () {
 })->name('security-declaration');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    // Shop Registration & Onboarding routes
+    Route::get('shop/register', [ShopRegistrationController::class, 'create'])->name('shop.register');
+    Route::post('shop/register', [ShopRegistrationController::class, 'store'])->name('shop.register.store');
+    Route::get('shop/dashboard', [DashboardController::class, 'index'])->name('shop.dashboard');
+
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
     Route::post('dashboard/toggle-qr', [DashboardController::class, 'toggleQr'])->name('dashboard.toggle-qr');
     Route::post('dashboard/update-profile', [DashboardController::class, 'updateProfile'])->name('dashboard.update-profile');
     Route::post('dashboard/job/{job}/retry', [DashboardController::class, 'retryJob'])->name('dashboard.job.retry');
