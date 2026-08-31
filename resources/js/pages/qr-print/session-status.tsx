@@ -39,6 +39,7 @@ export interface SessionJob {
     color_mode: string;
     paper_size: string;
     duplex: string;
+    page_range?: string | null;
     amount?: number;
     payment_method?: string;
     selected_sheets: string[] | null;
@@ -346,6 +347,11 @@ export default function SessionStatus({
                                                         {job.selected_sheets && job.selected_sheets.length > 0 && (
                                                             <span className="font-medium text-emerald-700 dark:text-emerald-300">
                                                                 Sheet: {job.selected_sheets.join(', ')}
+                                                            </span>
+                                                        )}
+                                                        {job.page_range && (
+                                                            <span className="font-semibold font-mono text-primary">
+                                                                Pages: {job.page_range}
                                                             </span>
                                                         )}
                                                         <span>· {job.copies} {job.copies === 1 ? 'copy' : 'copies'}</span>

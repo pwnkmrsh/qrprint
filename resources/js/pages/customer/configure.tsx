@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 type PaperSize = 'A4' | 'A3' | 'Letter' | 'Legal';
 type ColorMode = 'bw' | 'color';
 type Orientation = 'portrait' | 'landscape';
+type PageSelectionType = 'all' | 'range' | 'odd' | 'even' | 'first';
 
 type Config = {
     paper_size: PaperSize;
@@ -26,6 +27,8 @@ type Config = {
     copies: number;
     duplex: boolean;
     orientation: Orientation;
+    page_selection_type: PageSelectionType;
+    page_range: string;
 };
 
 interface DocumentItem {
@@ -57,6 +60,8 @@ export default function Configure({
         copies: 1,
         duplex: false,
         orientation: 'portrait',
+        page_selection_type: 'all',
+        page_range: '',
     });
 
     const [total, setTotal] = useState<number | null>(null);
@@ -65,6 +70,14 @@ export default function Configure({
     const [error, setError] = useState<string | null>(null);
 
     const totalPages = documents.reduce((sum, document) => sum + (document.pages || 1), 0);
+
+    const getComputedPageRange = (): string | null => {
+        if (config.page_selection_type === 'first') return '1';
+        if (config.page_selection_type === 'odd') return 'odd';
+        if (config.page_selection_type === 'even') return 'even';
+        if (config.page_selection_type === 'range') return config.page_range.trim() || null;
+        return null;
+    };
 
     useEffect(() => {
         let active = true;
@@ -80,7 +93,12 @@ export default function Configure({
                 'X-CSRF-TOKEN': csrf,
             },
             body: JSON.stringify({
-                ...config,
+                paper_size: config.paper_size,
+                color_mode: config.color_mode,
+                copies: config.copies,
+                duplex: config.duplex,
+                orientation: config.orientation,
+                page_range: getComputedPageRange(),
                 documents: documents.map((document) => document.id),
             }),
         })
@@ -125,6 +143,7 @@ export default function Configure({
                 copies: config.copies,
                 duplex: config.duplex ? '1' : '0',
                 orientation: config.orientation,
+                page_range: getComputedPageRange() ?? '',
             },
         });
     };
@@ -320,6 +339,83 @@ export default function Configure({
                                             </select>
                                         </div>
                                     </div>
+
+                                    {/* Pages Selection */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium text-foreground flex items-center justify-between">
+                                            <span>Pages to Print</span>
+                                            <span className="text-xs text-muted-foreground font-normal">
+                                                Total {totalPages} {totalPages === 1 ? 'page' : 'pages'}
+                                            </span>
+                                        </label>
+                                        <select
+                                            value={config.page_selection_type}
+                                            onChange={(e) =>
+                                                set(
+                                                    'page_selection_type',
+                                                    e.target.value as PageSelectionType
+                                                )
+                                            }
+                                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:border-ring focus:ring-1 focus:ring-ring outline-none"
+                                        >
+                                            <option value="all">All Pages (1-{totalPages})</option>
+                                            <option value="range">Custom Page Range (e.g. 1-3, 5)</option>
+                                            <option value="odd">Odd Pages Only (1, 3, 5...)</option>
+                                            <option value="even">Even Pages Only (2, 4, 6...)</option>
+                                            <option value="first">First Page Only (Page 1)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Custom Page Range Box */}
+                                    {config.page_selection_type === 'range' && (
+                                        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2 animate-in fade-in duration-200">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-xs font-semibold text-foreground">
+                                                    Enter Page Range
+                                                </label>
+                                                <span className="text-[11px] text-muted-foreground">
+                                                    e.g. 1-3, 5, 8-10
+                                                </span>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. 1-3, 5"
+                                                value={config.page_range}
+                                                onChange={(e) => set('page_range', e.target.value)}
+                                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono shadow-xs focus:border-ring focus:ring-1 focus:ring-ring outline-none"
+                                            />
+                                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                                <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mr-1">
+                                                    Presets:
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => set('page_range', '1')}
+                                                    className="px-2 py-0.5 rounded-md border bg-background text-[11px] font-medium hover:bg-muted"
+                                                >
+                                                    Page 1
+                                                </button>
+                                                {totalPages >= 3 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => set('page_range', `1-${Math.min(3, totalPages)}`)}
+                                                        className="px-2 py-0.5 rounded-md border bg-background text-[11px] font-medium hover:bg-muted"
+                                                    >
+                                                        Pages 1-{Math.min(3, totalPages)}
+                                                    </button>
+                                                )}
+                                                {totalPages >= 5 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => set('page_range', `1-${Math.min(5, totalPages)}`)}
+                                                        className="px-2 py-0.5 rounded-md border bg-background text-[11px] font-medium hover:bg-muted"
+                                                    >
+                                                        Pages 1-{Math.min(5, totalPages)}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Duplex / Double Side Checkbox */}
                                     <div className="rounded-lg border bg-muted/20 p-3">

@@ -43,6 +43,7 @@ interface PaymentProps {
         copies: number;
         duplex: boolean;
         orientation: string;
+        page_range?: string | null;
     };
     pricing: {
         rate: number;
@@ -73,6 +74,7 @@ export default function Payment({
         copies: config.copies,
         duplex: config.duplex,
         orientation: config.orientation,
+        page_range: config.page_range || null,
         payment_method: paymentMethod,
     });
 
@@ -329,6 +331,14 @@ export default function Payment({
                                                     {sym}{pricing.rate}
                                                 </span>
                                             </div>
+                                            {config.page_range && (
+                                                <div className="flex justify-between text-muted-foreground">
+                                                    <span>Page Range</span>
+                                                    <span className="font-medium font-mono text-foreground">
+                                                        {config.page_range}
+                                                    </span>
+                                                </div>
+                                            )}
                                             <div className="flex justify-between text-muted-foreground">
                                                 <span>Total Print Impressions</span>
                                                 <span className="font-medium text-foreground">

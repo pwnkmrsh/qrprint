@@ -37,6 +37,11 @@ import {
     Phone,
     MapPin,
     Lock,
+    SlidersHorizontal,
+    ChevronDown,
+    ChevronUp,
+    Hash,
+    BookOpen,
     ShieldCheck
 } from 'lucide-react';
 import React, { ChangeEvent, useState } from 'react';
@@ -63,7 +68,7 @@ export interface UploadedFile {
     paper_size: 'A4' | 'A3' | 'Letter' | 'Legal';
     scaling: 'actual' | 'fit_to_page' | 'shrink_to_fit' | 'fit_columns' | 'fit_rows' | 'fill_page';
     duplex: 'off' | 'long_edge' | 'short_edge';
-    page_selection_type: 'all' | 'range';
+    page_selection_type: 'all' | 'range' | 'odd' | 'even' | 'first';
     page_range: string;
     selected_sheets: string[];
     // Additional granular options
@@ -72,6 +77,143 @@ export interface UploadedFile {
     gridlines: boolean;
     row_col_headers: boolean;
     image_position: 'center' | 'top' | 'bottom';
+}
+
+/**
+ * Parse a page range string like "1-3, 5, 8-10" into a sorted unique array of page numbers.
+ */
+export function parsePageRangeString(rangeStr: string, totalPages?: number): number[] {
+    if (!rangeStr || !rangeStr.trim()) return [];
+    const parts = rangeStr.split(',');
+    const pages = new Set<number>();
+
+    for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+
+        if (trimmed.includes('-')) {
+            const [startStr, endStr] = trimmed.split('-');
+            const start = parseInt(startStr.trim(), 10);
+            const end = parseInt(endStr.trim(), 10);
+            if (!isNaN(start) && !isNaN(end) && start > 0 && end >= start) {
+                const maxPage = totalPages && totalPages > 0 ? Math.min(end, totalPages) : end;
+                for (let p = Math.max(1, start); p <= maxPage; p++) {
+                    pages.add(p);
+                }
+            }
+        } else {
+            const p = parseInt(trimmed, 10);
+            if (!isNaN(p) && p > 0) {
+                if (!totalPages || p <= totalPages) {
+                    pages.add(p);
+                }
+            }
+        }
+    }
+    return Array.from(pages).sort((a, b) => a - b);
+}
+
+/**
+ * Validate a page range string and return structured status + parsed page numbers.
+ */
+export function validatePageRangeString(rangeStr: string, totalPages?: number): {
+    isValid: boolean;
+    message?: string;
+    parsedPages: number[];
+} {
+    if (!rangeStr || !rangeStr.trim()) {
+        return { isValid: false, message: 'Please enter page numbers or range (e.g. 1-3, 5)', parsedPages: [] };
+    }
+
+    const trimmed = rangeStr.trim();
+    if (!/^[0-9\s,\-]+$/.test(trimmed)) {
+        return { isValid: false, message: 'Only numbers, commas, and hyphens are allowed (e.g. 1-3, 5)', parsedPages: [] };
+    }
+
+    const parts = trimmed.split(',');
+    for (const part of parts) {
+        const p = part.trim();
+        if (!p) continue;
+        if (p.includes('-')) {
+            const segments = p.split('-');
+            if (segments.length !== 2) {
+                return { isValid: false, message: `Invalid range format "${p}"`, parsedPages: [] };
+            }
+            const s = parseInt(segments[0].trim(), 10);
+            const e = parseInt(segments[1].trim(), 10);
+            if (isNaN(s) || isNaN(e) || s < 1 || e < s) {
+                return { isValid: false, message: `Invalid range "${p}". Start page must be ≤ end page.`, parsedPages: [] };
+            }
+            if (totalPages && totalPages > 0 && s > totalPages) {
+                return { isValid: false, message: `Page ${s} exceeds total document pages (${totalPages})`, parsedPages: [] };
+            }
+        } else {
+            const val = parseInt(p, 10);
+            if (isNaN(val) || val < 1) {
+                return { isValid: false, message: `Invalid page number "${p}"`, parsedPages: [] };
+            }
+            if (totalPages && totalPages > 0 && val > totalPages) {
+                return { isValid: false, message: `Page ${val} exceeds total document pages (${totalPages})`, parsedPages: [] };
+            }
+        }
+    }
+
+    const parsedPages = parsePageRangeString(trimmed, totalPages);
+    if (parsedPages.length === 0) {
+        return { isValid: false, message: 'No valid pages found in range', parsedPages: [] };
+    }
+
+    return { isValid: true, parsedPages };
+}
+
+/**
+ * Calculate effective page count for an uploaded file based on its print preferences.
+ */
+export function calculateEffectivePages(file: UploadedFile): number {
+    if (file.file_type === 'excel') {
+        return Math.max(1, file.selected_sheets.length);
+    }
+    const total = file.metadata?.page_count || 1;
+
+    if (file.page_selection_type === 'first') {
+        return 1;
+    }
+    if (file.page_selection_type === 'odd') {
+        return Math.ceil(total / 2);
+    }
+    if (file.page_selection_type === 'even') {
+        return Math.max(1, Math.floor(total / 2));
+    }
+    if (file.page_selection_type === 'range') {
+        if (!file.page_range || !file.page_range.trim()) {
+            return total;
+        }
+        const parsed = parsePageRangeString(file.page_range, total > 1 ? total : undefined);
+        return parsed.length > 0 ? parsed.length : total;
+    }
+    return total;
+}
+
+/**
+ * Return resolved page_range string for submission / printer agent.
+ */
+export function getComputedPageRangeString(file: UploadedFile): string | null {
+    if (file.file_type === 'excel') {
+        return null;
+    }
+    if (file.page_selection_type === 'first') {
+        return '1';
+    }
+    if (file.page_selection_type === 'odd') {
+        return 'odd';
+    }
+    if (file.page_selection_type === 'even') {
+        return 'even';
+    }
+    if (file.page_selection_type === 'range') {
+        return file.page_range.trim() || null;
+    }
+    return null;
 }
 
 interface MultiPrintProps {
@@ -126,6 +268,15 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
 
     // Preview modal state
     const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
+
+    // Expanded advanced settings per file index
+    const [expandedAdvancedIndexes, setExpandedAdvancedIndexes] = useState<number[]>([]);
+
+    const toggleAdvanced = (index: number) => {
+        setExpandedAdvancedIndexes((prev) =>
+            prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+        );
+    };
 
     // Handle File Upload
     const handleFilesSelected = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -241,17 +392,16 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                 paper_size: source.paper_size,
                 scaling: source.scaling,
                 duplex: source.duplex,
+                page_selection_type: source.page_selection_type,
+                page_range: source.page_range,
                 margins: source.margins,
             }))
         );
     };
 
-    // Helper: Calculate pages for a single file
+    // Helper: Calculate pages for a single file using effective page calculations
     const getFilePageCount = (file: UploadedFile): number => {
-        if (file.file_type === 'excel') {
-            return Math.max(1, file.selected_sheets.length);
-        }
-        return file.metadata?.page_count || 1;
+        return calculateEffectivePages(file);
     };
 
     // Helper: Calculate cost for a single file
@@ -303,9 +453,13 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                 setGlobalError(`Please select at least one sheet for "${f.original_name}".`);
                 return false;
             }
-            if (f.page_selection_type === 'range' && !f.page_range.trim()) {
-                setGlobalError(`Please specify a valid page range (e.g. 1-3) for "${f.original_name}".`);
-                return false;
+            if (f.page_selection_type === 'range') {
+                const totalDocPages = f.metadata?.page_count;
+                const validation = validatePageRangeString(f.page_range, totalDocPages);
+                if (!validation.isValid) {
+                    setGlobalError(`"${f.original_name}": ${validation.message}`);
+                    return false;
+                }
             }
         }
         setGlobalError(null);
@@ -330,7 +484,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                 paper_size: file.paper_size,
                 scaling: file.scaling,
                 duplex: file.duplex,
-                page_range: file.page_selection_type === 'range' ? file.page_range : null,
+                page_range: getComputedPageRangeString(file),
                 selected_sheets: file.file_type === 'excel' ? file.selected_sheets : null,
                 print_options: {
                     margins: file.margins,
@@ -598,6 +752,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
 
                                             {/* Print Configuration Controls */}
                                             <CardContent className="p-4 space-y-4 text-xs">
+                                                {/* Basic Specs Grid: Copies | Color Mode | Orientation | Paper Size */}
                                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                                     {/* Copies */}
                                                     <div className="space-y-1">
@@ -679,8 +834,8 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                                     </div>
                                                 </div>
 
-                                                {/* Second Row: Duplex & Excel Sheet Picker */}
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-border">
+                                                {/* Second Row: Sides (Duplex) & Pages to Print */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border">
                                                     {/* Duplex Sided */}
                                                     <div className="space-y-1">
                                                         <label className="font-semibold text-muted-foreground">Sides</label>
@@ -701,27 +856,289 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                                         </select>
                                                     </div>
 
-                                                    {/* Excel Sheet Selection CTA */}
-                                                    {hasSheets && (
-                                                        <div className="space-y-1">
-                                                            <label className="font-semibold text-muted-foreground">Excel Worksheets</label>
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="w-full justify-between h-9 text-xs border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
-                                                                onClick={() => setActiveSheetModalFileIndex(index)}
-                                                            >
-                                                                <span className="flex items-center gap-1.5 truncate">
-                                                                    <FileSpreadsheet className="size-3.5" />
-                                                                    {file.selected_sheets.length === 0
-                                                                        ? 'Select sheets to print'
-                                                                        : `${file.selected_sheets.length} sheet(s) selected`}
+                                                    {/* Pages Selection Option */}
+                                                    <div className="space-y-1">
+                                                        <label className="font-semibold text-muted-foreground flex items-center justify-between">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <BookOpen className="size-3.5 text-primary" />
+                                                                Pages to Print
+                                                            </span>
+                                                            {file.metadata?.page_count && file.metadata.page_count > 1 && (
+                                                                <span className="text-[10px] text-muted-foreground font-normal">
+                                                                    Total {file.metadata.page_count} pages
                                                                 </span>
-                                                                <Badge variant="secondary" className="text-[10px] ml-2">
-                                                                    Change
-                                                                </Badge>
-                                                            </Button>
+                                                            )}
+                                                        </label>
+                                                        <select
+                                                            value={file.page_selection_type}
+                                                            onChange={(e) =>
+                                                                updateFileOption(
+                                                                    index,
+                                                                    'page_selection_type',
+                                                                    e.target.value as 'all' | 'range' | 'odd' | 'even' | 'first'
+                                                                )
+                                                            }
+                                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                                        >
+                                                            <option value="all">
+                                                                All Pages {file.metadata?.page_count ? `(1-${file.metadata.page_count})` : ''}
+                                                            </option>
+                                                            <option value="range">Custom Page Range (e.g. 1-3, 5)</option>
+                                                            <option value="odd">Odd Pages Only (1, 3, 5...)</option>
+                                                            <option value="even">Even Pages Only (2, 4, 6...)</option>
+                                                            <option value="first">First Page Only (Page 1)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                {/* Custom Page Range Input & Presets (when 'range' is selected) */}
+                                                {file.page_selection_type === 'range' && (() => {
+                                                    const totalDocPages = file.metadata?.page_count;
+                                                    const validation = file.page_range ? validatePageRangeString(file.page_range, totalDocPages) : null;
+
+                                                    return (
+                                                        <div className="p-3 rounded-lg border bg-primary/5 border-primary/20 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                                                <label className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                                                    <Hash className="size-3.5 text-primary" />
+                                                                    Specify Page Numbers / Ranges
+                                                                </label>
+                                                                <span className="text-[11px] text-muted-foreground">
+                                                                    e.g. <span className="font-mono text-foreground font-semibold">1-3, 5, 8-10</span>
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="e.g. 1-3, 5"
+                                                                    value={file.page_range}
+                                                                    onChange={(e) => updateFileOption(index, 'page_range', e.target.value)}
+                                                                    className={`w-full rounded-md border bg-background px-3 py-1.5 text-sm font-mono shadow-xs focus:outline-none focus:ring-2 ${
+                                                                        validation && !validation.isValid
+                                                                            ? 'border-destructive focus:ring-destructive text-destructive'
+                                                                            : 'border-input focus:ring-ring'
+                                                                    }`}
+                                                                />
+                                                                {file.page_range && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                                                        onClick={() => updateFileOption(index, 'page_range', '')}
+                                                                    >
+                                                                        Clear
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Quick Selection Chips */}
+                                                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                                                <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mr-1">
+                                                                    Presets:
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => updateFileOption(index, 'page_range', '1')}
+                                                                    className="px-2 py-0.5 rounded-md border bg-background text-[11px] font-medium hover:bg-muted transition-colors"
+                                                                >
+                                                                    Page 1
+                                                                </button>
+                                                                {totalDocPages && totalDocPages >= 3 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            updateFileOption(
+                                                                                index,
+                                                                                'page_range',
+                                                                                `1-${Math.min(3, totalDocPages)}`
+                                                                            )
+                                                                        }
+                                                                        className="px-2 py-0.5 rounded-md border bg-background text-[11px] font-medium hover:bg-muted transition-colors"
+                                                                    >
+                                                                        Pages 1-{Math.min(3, totalDocPages)}
+                                                                    </button>
+                                                                )}
+                                                                {totalDocPages && totalDocPages >= 5 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            updateFileOption(
+                                                                                index,
+                                                                                'page_range',
+                                                                                `1-${Math.min(5, totalDocPages)}`
+                                                                            )
+                                                                        }
+                                                                        className="px-2 py-0.5 rounded-md border bg-background text-[11px] font-medium hover:bg-muted transition-colors"
+                                                                    >
+                                                                        Pages 1-{Math.min(5, totalDocPages)}
+                                                                    </button>
+                                                                )}
+                                                                {totalDocPages && totalDocPages > 1 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            updateFileOption(
+                                                                                index,
+                                                                                'page_range',
+                                                                                `1-${totalDocPages}`
+                                                                            )
+                                                                        }
+                                                                        className="px-2 py-0.5 rounded-md border bg-background text-[11px] font-medium hover:bg-muted transition-colors"
+                                                                    >
+                                                                        All (1-{totalDocPages})
+                                                                    </button>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Live Real-Time Validation Feedback Pill */}
+                                                            {validation && (
+                                                                <div className="pt-1">
+                                                                    {validation.isValid ? (
+                                                                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300 font-medium">
+                                                                            <CheckCircle2 className="size-3.5 shrink-0" />
+                                                                            <span>
+                                                                                {validation.parsedPages.length} {validation.parsedPages.length === 1 ? 'page' : 'pages'} selected: [{validation.parsedPages.join(', ')}]
+                                                                            </span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-1.5 text-xs text-destructive font-medium">
+                                                                            <AlertCircle className="size-3.5 shrink-0" />
+                                                                            <span>{validation.message}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
+
+                                                {/* Information badges for Odd / Even / First page modes */}
+                                                {file.page_selection_type === 'odd' && (
+                                                    <div className="p-2.5 rounded-lg border bg-muted/40 text-xs flex items-center justify-between text-muted-foreground">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <BookOpen className="size-3.5 text-primary" />
+                                                            Odd numbered pages only (1, 3, 5, 7...)
+                                                        </span>
+                                                        <span className="font-semibold text-foreground">
+                                                            {filePages} {filePages === 1 ? 'page' : 'pages'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {file.page_selection_type === 'even' && (
+                                                    <div className="p-2.5 rounded-lg border bg-muted/40 text-xs flex items-center justify-between text-muted-foreground">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <BookOpen className="size-3.5 text-primary" />
+                                                            Even numbered pages only (2, 4, 6, 8...)
+                                                        </span>
+                                                        <span className="font-semibold text-foreground">
+                                                            {filePages} {filePages === 1 ? 'page' : 'pages'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {file.page_selection_type === 'first' && (
+                                                    <div className="p-2.5 rounded-lg border bg-muted/40 text-xs flex items-center justify-between text-muted-foreground">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <BookOpen className="size-3.5 text-primary" />
+                                                            First page only
+                                                        </span>
+                                                        <span className="font-semibold text-foreground">1 page</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Excel Sheet Selection CTA */}
+                                                {hasSheets && (
+                                                    <div className="space-y-1 pt-1 border-t border-border">
+                                                        <label className="font-semibold text-muted-foreground">Excel Worksheets</label>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="w-full justify-between h-9 text-xs border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
+                                                            onClick={() => setActiveSheetModalFileIndex(index)}
+                                                        >
+                                                            <span className="flex items-center gap-1.5 truncate">
+                                                                <FileSpreadsheet className="size-3.5" />
+                                                                {file.selected_sheets.length === 0
+                                                                    ? 'Select sheets to print'
+                                                                    : `${file.selected_sheets.length} sheet(s) selected`}
+                                                            </span>
+                                                            <Badge variant="secondary" className="text-[10px] ml-2">
+                                                                Change
+                                                            </Badge>
+                                                        </Button>
+                                                    </div>
+                                                )}
+
+                                                {/* Collapsible Advanced Print Preferences (Scaling, Margins, Image Position) */}
+                                                <div className="pt-2 border-t border-border">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleAdvanced(index)}
+                                                        className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors py-1"
+                                                    >
+                                                        <span className="flex items-center gap-1.5">
+                                                            <SlidersHorizontal className="size-3.5 text-primary" />
+                                                            Advanced Print Preferences (Scaling & Margins)
+                                                        </span>
+                                                        {expandedAdvancedIndexes.includes(index) ? (
+                                                            <ChevronUp className="size-3.5" />
+                                                        ) : (
+                                                            <ChevronDown className="size-3.5" />
+                                                        )}
+                                                    </button>
+
+                                                    {expandedAdvancedIndexes.includes(index) && (
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 mt-1 border-t border-dashed animate-in fade-in duration-200">
+                                                            {/* Scaling */}
+                                                            <div className="space-y-1">
+                                                                <label className="font-semibold text-muted-foreground">Page Scaling</label>
+                                                                <select
+                                                                    value={file.scaling}
+                                                                    onChange={(e) =>
+                                                                        updateFileOption(
+                                                                            index,
+                                                                            'scaling',
+                                                                            e.target.value as UploadedFile['scaling']
+                                                                        )
+                                                                    }
+                                                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                                                >
+                                                                    <option value="actual">Actual Size (100%)</option>
+                                                                    <option value="fit_to_page">Fit to Printable Page</option>
+                                                                    <option value="shrink_to_fit">Shrink to Fit</option>
+                                                                    {file.file_type === 'excel' && (
+                                                                        <>
+                                                                            <option value="fit_columns">Fit All Columns on 1 Page</option>
+                                                                            <option value="fit_rows">Fit All Rows on 1 Page</option>
+                                                                        </>
+                                                                    )}
+                                                                    {file.file_type === 'image' && (
+                                                                        <option value="fill_page">Fill Entire Page</option>
+                                                                    )}
+                                                                </select>
+                                                            </div>
+
+                                                            {/* Margins */}
+                                                            <div className="space-y-1">
+                                                                <label className="font-semibold text-muted-foreground">Margins</label>
+                                                                <select
+                                                                    value={file.margins}
+                                                                    onChange={(e) =>
+                                                                        updateFileOption(
+                                                                            index,
+                                                                            'margins',
+                                                                            e.target.value as 'normal' | 'narrow' | 'wide'
+                                                                        )
+                                                                    }
+                                                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                                                >
+                                                                    <option value="normal">Normal (Standard)</option>
+                                                                    <option value="narrow">Narrow (More Content)</option>
+                                                                    <option value="wide">Wide (Spacious)</option>
+                                                                </select>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>

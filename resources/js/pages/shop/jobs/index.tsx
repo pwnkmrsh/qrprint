@@ -640,6 +640,11 @@ export default function JobHistory({
                                                                 Duplex
                                                             </Badge>
                                                         )}
+                                                        {job.page_range && (
+                                                            <Badge variant="outline" className="text-[10px] py-0 font-mono text-primary border-primary/30">
+                                                                P: {job.page_range}
+                                                            </Badge>
+                                                        )}
                                                     </div>
                                                 </td>
 
@@ -866,8 +871,11 @@ export default function JobHistory({
                                         <p className="font-semibold text-foreground mt-0.5 truncate">{detailsModalJob.printer_name || 'N/A'}</p>
                                     </div>
                                     <div className="p-3 rounded-lg border bg-background">
-                                        <p className="text-muted-foreground">Copies / Sides</p>
-                                        <p className="font-semibold text-foreground mt-0.5">{detailsModalJob.copies}x · {detailsModalJob.duplex !== 'off' ? 'Double Sided' : 'Single Sided'}</p>
+                                        <p className="text-muted-foreground">Copies / Sides / Pages</p>
+                                        <p className="font-semibold text-foreground mt-0.5">
+                                            {detailsModalJob.copies}x · {detailsModalJob.duplex !== 'off' ? 'Double Sided' : 'Single Sided'}
+                                            {detailsModalJob.page_range ? ` · P: ${detailsModalJob.page_range}` : ''}
+                                        </p>
                                     </div>
                                     <div className="p-3 rounded-lg border bg-background">
                                         <p className="text-muted-foreground">Paper & Color</p>

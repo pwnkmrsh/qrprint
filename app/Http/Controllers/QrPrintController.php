@@ -197,6 +197,52 @@ class QrPrintController extends Controller
     }
 
     /**
+     * Calculate effective printable pages from page range expression.
+     */
+    protected function calculatePageCountFromRange(?string $pageRange, int $totalPages = 1): int
+    {
+        if (empty($pageRange) || strtolower(trim($pageRange)) === 'all') {
+            return max(1, $totalPages);
+        }
+
+        $lower = strtolower(trim($pageRange));
+        if ($lower === 'odd') {
+            return (int) ceil(max(1, $totalPages) / 2);
+        }
+        if ($lower === 'even') {
+            return (int) max(1, floor(max(1, $totalPages) / 2));
+        }
+
+        $pages = [];
+        $parts = explode(',', $pageRange);
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '') continue;
+
+            if (str_contains($part, '-')) {
+                [$startStr, $endStr] = explode('-', $part, 2);
+                $start = (int) trim($startStr);
+                $end = (int) trim($endStr);
+                if ($start > 0 && $end >= $start) {
+                    $limit = ($totalPages > 1) ? min($end, $totalPages) : $end;
+                    for ($i = max(1, $start); $i <= $limit; $i++) {
+                        $pages[$i] = true;
+                    }
+                }
+            } else {
+                $p = (int) $part;
+                if ($p > 0) {
+                    if ($totalPages <= 1 || $p <= $totalPages) {
+                        $pages[$p] = true;
+                    }
+                }
+            }
+        }
+
+        return !empty($pages) ? count($pages) : max(1, $totalPages);
+    }
+
+    /**
      * Create PrintSession and individual PrintJobs for all configured files.
      */
     public function createSession(Request $request, string $token)
@@ -339,8 +385,9 @@ class QrPrintController extends Controller
             $pages = 1;
             if ($doc->file_type === 'excel' && !empty($fileConfig['selected_sheets'])) {
                 $pages = count($fileConfig['selected_sheets']);
-            } elseif ($doc->page_count) {
-                $pages = $doc->page_count;
+            } else {
+                $docPages = $doc->page_count ?: 1;
+                $pages = $this->calculatePageCountFromRange($fileConfig['page_range'] ?? null, $docPages);
             }
             $jobAmount = (float)($pages * $resolvedCopies * $rate);
             $totalSessionAmount += $jobAmount;
@@ -437,6 +484,7 @@ class QrPrintController extends Controller
                 'color_mode' => $job->color_mode,
                 'paper_size' => $job->paper_size,
                 'duplex' => $job->duplex,
+                'page_range' => $job->page_range,
                 'amount' => (float)$job->amount,
                 'payment_method' => $job->payment_method,
                 'selected_sheets' => $job->selected_sheets,
@@ -491,6 +539,7 @@ class QrPrintController extends Controller
                 'color_mode' => $job->color_mode,
                 'paper_size' => $job->paper_size,
                 'duplex' => $job->duplex,
+                'page_range' => $job->page_range,
                 'amount' => (float)$job->amount,
                 'selected_sheets' => $job->selected_sheets,
                 'status' => $job->status,
@@ -743,10 +792,19 @@ class QrPrintController extends Controller
             'copies' => ['required', 'integer', 'min:1', 'max:20'],
             'duplex' => ['nullable'],
             'orientation' => ['nullable'],
+            'page_range' => ['nullable', 'string'],
         ]);
 
-        $count = PrintDocument::where('qr_print_id', $qrPrint->id)->whereIn('id', $data['documents'])->count();
-        abort_unless($count === count($data['documents']), 404);
+        $documents = PrintDocument::where('qr_print_id', $qrPrint->id)
+            ->whereIn('id', $data['documents'])
+            ->get();
+        abort_unless($documents->count() === count($data['documents']), 404);
+
+        $totalPages = 0;
+        foreach ($documents as $doc) {
+            $docPages = $doc->page_count ?: 1;
+            $totalPages += $this->calculatePageCountFromRange($data['page_range'] ?? null, $docPages);
+        }
 
         $setting = $qrPrint->shopSetting;
         $bwRate = $setting ? (float)$setting->bw_price_per_page : 2.0;
@@ -756,9 +814,9 @@ class QrPrintController extends Controller
         return response()->json([
             'success' => true,
             'estimate' => [
-                'pages' => $count,
+                'pages' => $totalPages,
                 'rate' => $rate,
-                'subtotal' => $count * $data['copies'] * $rate,
+                'subtotal' => $totalPages * $data['copies'] * $rate,
             ],
         ]);
     }
