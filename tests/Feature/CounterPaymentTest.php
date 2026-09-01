@@ -205,3 +205,92 @@ test('print session handles partial failures and retries correctly', function ()
     expect($session->status)->toBe('printing');
     expect($session->print_status)->toBe('printing');
 });
+
+test('online payment with UPI creates paid session and ready to print jobs immediately', function () {
+    $owner = User::factory()->create();
+    $qrPrint = QrPrint::create([
+        'user_id' => $owner->id,
+        'uuid' => (string) Illuminate\Support\Str::uuid(),
+        'title' => 'Test Cyber Point',
+        'print_token' => 'test-upi-cafe',
+        'is_active' => true,
+    ]);
+
+    $doc = PrintDocument::create([
+        'qr_print_id' => $qrPrint->id,
+        'original_name' => 'test_upi_doc.pdf',
+        'stored_name' => 'test-upi.pdf',
+        'mime_type' => 'application/pdf',
+        'file_size' => 2048,
+        'disk' => 'public',
+        'path' => 'print-documents/test-upi.pdf',
+        'file_type' => 'pdf',
+        'metadata' => ['page_count' => 3],
+        'status' => 'ready',
+    ]);
+
+    $response = $this->post(route('qr-print.session.create', $qrPrint->print_token), [
+        'payment_method' => 'upi',
+        'files' => [
+            [
+                'document_id' => $doc->id,
+                'copies' => 1,
+                'color_mode' => 'bw',
+                'paper_size' => 'A4',
+                'duplex' => 'off',
+            ]
+        ]
+    ]);
+
+    $response->assertRedirect();
+    $session = PrintSession::orderBy('id', 'desc')->first();
+    expect($session->payment_method)->toBe('upi');
+    expect($session->payment_status)->toBe('paid');
+    expect($session->print_status)->toBe('ready_to_print');
+    expect($session->total_amount)->toEqual(6.00); // 3 pages * 1 copy * 2.00
+
+    $job = PrintJob::where('print_session_id', $session->id)->first();
+    expect($job->status)->toBe('pending');
+    expect($job->payment_method)->toBe('upi');
+});
+
+test('shop owner can configure payment gateway provider and UPI settings', function () {
+    $owner = User::factory()->create();
+    $role = \App\Models\Role::firstOrCreate(['name' => 'SHOP OWNER', 'guard_name' => 'web']);
+    $owner->assignRole($role);
+
+    $qrPrint = QrPrint::create([
+        'user_id' => $owner->id,
+        'uuid' => (string) Illuminate\Support\Str::uuid(),
+        'title' => 'Test Cafe Settings',
+        'print_token' => 'test-cafe-settings',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($owner);
+
+    $response = $this->post(route('shop.settings.payment.update'), [
+        'online_payment_enabled' => true,
+        'counter_payment_enabled' => true,
+        'show_currency' => true,
+        'currency_symbol' => '₹',
+        'payment_modes' => ['cash', 'upi', 'card', 'wallet'],
+        'gateway_provider' => 'razorpay',
+        'upi_id' => 'abcshop@okhdfcbank',
+        'merchant_name' => 'ABC Print Point',
+        'default_online_submode' => 'upi',
+        'api_key_id' => 'rzp_live_testkey123',
+        'secret_key' => 'secret_test_key_456',
+        'webhook_secret' => 'whsec_test_789',
+        'webhook_url' => 'http://localhost/api/payment/webhook/' . $qrPrint->uuid,
+    ]);
+
+    $response->assertRedirect();
+    $setting = \App\Models\ShopSetting::where('qr_print_id', $qrPrint->id)->first();
+    expect($setting)->not->toBeNull();
+    expect($setting->gateway_provider)->toBe('razorpay');
+    expect($setting->upi_id)->toBe('abcshop@okhdfcbank');
+    expect($setting->merchant_name)->toBe('ABC Print Point');
+    expect($setting->default_online_submode)->toBe('upi');
+    expect($setting->api_key_id)->toBe('rzp_live_testkey123');
+});

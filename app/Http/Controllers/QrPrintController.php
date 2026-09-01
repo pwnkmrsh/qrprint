@@ -125,6 +125,11 @@ class QrPrintController extends Controller
                 'show_currency' => $setting ? (bool)$setting->show_currency : true,
                 'currency_symbol' => $setting?->currency_symbol ?: '₹',
                 'payment_modes' => $setting?->payment_modes ?: ['cash', 'upi', 'card', 'wallet'],
+                'gateway_provider' => $setting?->gateway_provider ?? 'razorpay',
+                'upi_id' => $setting?->upi_id ?? ($setting?->mobile_number ? preg_replace('/[^0-9]/', '', $setting->mobile_number) . '@upi' : 'merchant@upi'),
+                'merchant_name' => $setting?->merchant_name ?? ($setting?->shop_name ?: $qrPrint->title),
+                'default_online_submode' => $setting?->default_online_submode ?? 'upi',
+                'api_key_id' => $setting?->api_key_id ?: '',
             ],
             'limits' => [
                 'max_files' => 10,
@@ -135,26 +140,79 @@ class QrPrintController extends Controller
     }
 
     /**
-     * Multi-file upload with automatic analysis and Excel sheet extraction.
+     * Multi-file upload with automatic analysis, metadata extraction, and resilient error handling.
      */
     public function uploadMulti(Request $request, string $token, DocumentAnalyzerService $analyzer)
     {
+        // 1. Detect if PHP post_max_size was exceeded (which empties $_POST and $_FILES in PHP)
+        if ($request->server('CONTENT_LENGTH') && (int)$request->server('CONTENT_LENGTH') > 0 && empty($request->all()) && empty($request->allFiles())) {
+            $postMaxSize = ini_get('post_max_size') ?: '12M';
+            return response()->json([
+                'success' => false,
+                'message' => "Upload payload exceeded the server's post_max_size ({$postMaxSize}). Please upload files individually or in smaller batches.",
+            ], 413);
+        }
+
         $qrPrint = $this->findActivePrint($token);
 
-        $validated = $request->validate([
-            'documents' => ['required', 'array', 'min:1', 'max:10'],
-            'documents.*' => [
-                'required',
-                'file',
-                'mimes:pdf,jpg,jpeg,png,webp,xls,xlsx,csv,doc,docx,ppt,pptx',
-                'max:20480', // 20 MB
-            ],
-        ]);
+        // Auto-heal missing UUID if any
+        if (empty($qrPrint->uuid)) {
+            $qrPrint->uuid = (string) Str::uuid();
+            $qrPrint->save();
+        }
+
+        // Accept files from 'documents', 'documents[]', 'document', or 'file'
+        $files = [];
+        if ($request->hasFile('documents')) {
+            $raw = $request->file('documents');
+            $files = is_array($raw) ? $raw : [$raw];
+        } elseif ($request->hasFile('document')) {
+            $files = [$request->file('document')];
+        } elseif ($request->hasFile('file')) {
+            $files = [$request->file('file')];
+        }
+
+        if (empty($files)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No files were uploaded. Please select at least one document.',
+            ], 422);
+        }
+
+        if (count($files) > 10) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You can upload a maximum of 10 files per request.',
+            ], 422);
+        }
+
+        $allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'xls', 'xlsx', 'csv', 'doc', 'docx', 'ppt', 'pptx'];
+        $maxBytes = 20 * 1024 * 1024; // 20 MB
 
         $uploaded = [];
-        foreach ($validated['documents'] as $file) {
+        $errors = [];
+
+        foreach ($files as $index => $file) {
+            if (!$file || !$file->isValid()) {
+                $err = $file ? $file->getErrorMessage() : 'Upload failed';
+                $errors[] = "File #" . ($index + 1) . " failed to upload ({$err}).";
+                continue;
+            }
+
             $originalName = $file->getClientOriginalName();
-            $extension = $file->getClientOriginalExtension() ?: pathinfo($originalName, PATHINFO_EXTENSION);
+            $extension = strtolower($file->getClientOriginalExtension() ?: pathinfo($originalName, PATHINFO_EXTENSION));
+            $fileSize = $file->getSize();
+
+            if (!in_array($extension, $allowedExtensions, true)) {
+                $errors[] = "\"{$originalName}\" has an unsupported file format (.{$extension}). Supported: " . implode(', ', $allowedExtensions);
+                continue;
+            }
+
+            if ($fileSize > $maxBytes) {
+                $errors[] = "\"{$originalName}\" exceeds the 20MB file size limit.";
+                continue;
+            }
+
             $mimeType = $file->getMimeType() ?: 'application/octet-stream';
             $storedName = $file->hashName();
 
@@ -164,7 +222,7 @@ class QrPrintController extends Controller
                 'public'
             );
 
-            $fullStoragePath = storage_path('app/public/' . $path);
+            $fullStoragePath = Storage::disk('public')->path($path);
             $analysis = $analyzer->analyze($fullStoragePath, $extension, $mimeType);
 
             $doc = PrintDocument::create([
@@ -172,7 +230,7 @@ class QrPrintController extends Controller
                 'original_name' => $originalName,
                 'stored_name' => $storedName,
                 'mime_type' => $mimeType,
-                'file_size' => $file->getSize(),
+                'file_size' => $fileSize,
                 'disk' => 'public',
                 'path' => $path,
                 'file_type' => $analysis['file_type'],
@@ -190,9 +248,18 @@ class QrPrintController extends Controller
             ];
         }
 
+        if (empty($uploaded) && !empty($errors)) {
+            return response()->json([
+                'success' => false,
+                'message' => implode(' ', $errors),
+                'errors' => $errors,
+            ], 422);
+        }
+
         return response()->json([
             'success' => true,
             'documents' => $uploaded,
+            'warnings' => $errors,
         ]);
     }
 
@@ -296,8 +363,8 @@ class QrPrintController extends Controller
         $colorPrice = $setting ? (float)$setting->color_price_per_page : 10.0;
         $currency = $setting?->currency_symbol ?: '₹';
 
-        $paymentMethod = $validated['payment_method'] ?? 'counter';
-        $isOnline = ($paymentMethod === 'online' || $paymentMethod === 'upi');
+        $paymentMethod = $validated['payment_method'] ?? 'online';
+        $isOnline = in_array($paymentMethod, ['online', 'upi', 'card', 'wallet']);
         $paymentStatus = $isOnline ? 'paid' : 'pending';
         $printStatus = $isOnline ? 'ready_to_print' : 'pending_payment';
 
@@ -417,6 +484,18 @@ class QrPrintController extends Controller
 
         // Update session total amount
         $session->update(['total_amount' => $totalSessionAmount]);
+
+        if ($isOnline) {
+            app(\App\Services\PaymentManagerService::class)->recordOnlineSuccess(
+                $session,
+                [
+                    'payment_method' => $paymentMethod,
+                    'amount' => $totalSessionAmount,
+                    'order_id' => $session->formatted_order_id,
+                ],
+                $setting?->gateway_provider ?: 'direct_upi'
+            );
+        }
 
         $qrPrint->increment('print_count');
         $qrPrint->update(['last_printed_at' => now()]);
@@ -688,6 +767,11 @@ class QrPrintController extends Controller
                 'show_currency' => $setting ? (bool)$setting->show_currency : true,
                 'currency_symbol' => $setting?->currency_symbol ?: '₹',
                 'payment_modes' => $setting?->payment_modes ?: ['cash', 'upi', 'card', 'wallet'],
+                'gateway_provider' => $setting?->gateway_provider ?? 'razorpay',
+                'upi_id' => $setting?->upi_id ?? ($setting?->mobile_number ? preg_replace('/[^0-9]/', '', $setting->mobile_number) . '@upi' : 'merchant@upi'),
+                'merchant_name' => $setting?->merchant_name ?? ($setting?->shop_name ?: $qrPrint->title),
+                'default_online_submode' => $setting?->default_online_submode ?? 'upi',
+                'api_key_id' => $setting?->api_key_id ?: '',
             ],
             'documents' => $documents->map(fn(PrintDocument $doc) => [
                 'id' => $doc->id,

@@ -5,7 +5,22 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, Sid
 import { useLayout } from '@/contexts/LayoutContext';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Lock, QrCode, Shield, Users, Printer, Store, History, FileText, Menu } from 'lucide-react';
+import { 
+    LayoutGrid, 
+    Lock, 
+    QrCode, 
+    Shield, 
+    Users, 
+    Printer, 
+    Store, 
+    History, 
+    FileText, 
+    Menu, 
+    Settings, 
+    CreditCard, 
+    ShoppingBag, 
+    Cpu 
+} from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -13,6 +28,41 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: '/dashboard',
         icon: LayoutGrid,
+    },
+    {
+        title: 'Global Settings',
+        href: '/admin/settings',
+        icon: Settings,
+    },
+    {
+        title: 'Payments Hub',
+        href: '/admin/payments',
+        icon: CreditCard,
+    },
+    {
+        title: 'Orders',
+        href: '/admin/orders',
+        icon: ShoppingBag,
+    },
+    {
+        title: 'Shops',
+        href: '/admin/shops',
+        icon: Store,
+    },
+    {
+        title: 'Customers',
+        href: '/admin/customers',
+        icon: Users,
+    },
+    {
+        title: 'Print Jobs',
+        href: '/admin/print-jobs',
+        icon: Printer,
+    },
+    {
+        title: 'Print Agents',
+        href: '/admin/print-agents',
+        icon: Cpu,
     },
     {
         title: 'Job History',

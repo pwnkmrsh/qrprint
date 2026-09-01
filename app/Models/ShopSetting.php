@@ -80,4 +80,55 @@ class ShopSetting extends Model
     {
         return ['cash', 'upi', 'card', 'wallet'];
     }
+
+    /**
+     * Payment Gateway Provider (razorpay, phonepe, paytm, cashfree, direct_upi, stripe)
+     */
+    public function getGatewayProviderAttribute(): string
+    {
+        return $this->settings['gateway_provider'] ?? 'razorpay';
+    }
+
+    /**
+     * Shop UPI ID / VPA for dynamic QR code generation
+     */
+    public function getUpiIdAttribute(): string
+    {
+        if (!empty($this->settings['upi_id'])) {
+            return $this->settings['upi_id'];
+        }
+
+        if (!empty($this->mobile_number)) {
+            $digits = preg_replace('/[^0-9]/', '', $this->mobile_number);
+            if (!empty($digits)) {
+                return $digits . '@upi';
+            }
+        }
+
+        return 'merchant@upi';
+    }
+
+    /**
+     * Merchant name displayed on UPI payment apps
+     */
+    public function getMerchantNameAttribute(): string
+    {
+        return $this->settings['merchant_name'] ?? ($this->shop_name ?: 'Print Shop');
+    }
+
+    /**
+     * Default selected online sub-mode (upi or card)
+     */
+    public function getDefaultOnlineSubmodeAttribute(): string
+    {
+        return $this->settings['default_online_submode'] ?? 'upi';
+    }
+
+    /**
+     * Webhook secret key for gateway signature verification
+     */
+    public function getWebhookSecretAttribute(): ?string
+    {
+        return $this->settings['webhook_secret'] ?? null;
+    }
 }

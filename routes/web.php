@@ -17,6 +17,14 @@ use App\Http\Controllers\PageController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\ShopRegistrationController;
+use App\Http\Controllers\CashfreePaymentController;
+use App\Http\Controllers\Admin\AdminSettingController;
+use App\Http\Controllers\Admin\AdminShopController;
+use App\Http\Controllers\Admin\AdminCustomerController;
+use App\Http\Controllers\Admin\AdminOrderController;
+use App\Http\Controllers\Admin\AdminPaymentController;
+use App\Http\Controllers\Admin\AdminPrintJobController;
+use App\Http\Controllers\Admin\AdminPrintAgentController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -130,6 +138,45 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('qr-print/{qrPrint}/qr', [QrPrintController::class, 'qr'])
         ->name('qr-print.qr');
+
+    // -------------------------------------------------------------
+    // Super Admin: Settings, Shops, Customers, Orders, Payments Hub
+    // -------------------------------------------------------------
+    Route::prefix('admin')->name('admin.')->group(function () {
+        // Settings (General, Cashfree, Print)
+        Route::get('settings', [AdminSettingController::class, 'index'])->name('settings.index');
+        Route::post('settings/general', [AdminSettingController::class, 'updateGeneral'])->name('settings.general');
+        Route::post('settings/cashfree', [AdminSettingController::class, 'updateCashfree'])->name('settings.cashfree');
+        Route::post('settings/cashfree/test', [AdminSettingController::class, 'testCashfree'])->name('settings.cashfree.test');
+        Route::post('settings/print', [AdminSettingController::class, 'updatePrint'])->name('settings.print');
+
+        // Shops Management
+        Route::get('shops', [AdminShopController::class, 'index'])->name('shops.index');
+        Route::post('shops/{shop}/toggle-active', [AdminShopController::class, 'toggleActive'])->name('shops.toggle-active');
+
+        // Customers
+        Route::get('customers', [AdminCustomerController::class, 'index'])->name('customers.index');
+
+        // Orders
+        Route::get('orders', [AdminOrderController::class, 'index'])->name('orders.index');
+        Route::get('orders/{session}', [AdminOrderController::class, 'show'])->name('orders.show');
+
+        // Payments Hub (Online, Counter, Failed, Refunds)
+        Route::get('payments', [AdminPaymentController::class, 'index'])->name('payments.index');
+        Route::post('payments/{payment}/refund', [AdminPaymentController::class, 'refund'])->name('payments.refund');
+
+        // Print Jobs
+        Route::get('print-jobs', [AdminPrintJobController::class, 'index'])->name('print-jobs.index');
+        Route::post('print-jobs/{job}/retry', [AdminPrintJobController::class, 'retry'])->name('print-jobs.retry');
+        Route::post('print-jobs/{job}/cancel', [AdminPrintJobController::class, 'cancel'])->name('print-jobs.cancel');
+
+        // Print Agents
+        Route::get('print-agents', [AdminPrintAgentController::class, 'index'])->name('print-agents.index');
+    });
+
+    // Shop settings payment test
+    Route::post('shop/settings/payment/test-cashfree', [CashfreePaymentController::class, 'testConnection'])
+        ->name('shop.settings.payment.test-cashfree');
 });
 
 // Dynamic Public CMS Pages
@@ -160,6 +207,13 @@ Route::post('/print/{token}/session/create', [QrPrintController::class, 'createS
 Route::get('/print/{token}/session/{session}', [QrPrintController::class, 'sessionStatus'])->name('qr-print.session.status');
 Route::get('/print/{token}/session/{session}/api', [QrPrintController::class, 'sessionStatusApi'])->name('qr-print.session.api');
 Route::post('/print/{token}/job/retry', [QrPrintController::class, 'retryJob'])->name('qr-print.job.retry');
+
+// Cashfree Payment Gateway Checkout & Webhook Routes
+Route::post('/print/{token}/cashfree/create-order', [CashfreePaymentController::class, 'createOrder'])->name('qr-print.cashfree.create-order');
+Route::get('/print/{token}/cashfree/return', [CashfreePaymentController::class, 'handleReturn'])->name('qr-print.cashfree.return');
+Route::post('/s/{token}/cashfree/create-order', [CashfreePaymentController::class, 'createOrder'])->name('customer.cashfree.create-order');
+Route::get('/s/{token}/cashfree/return', [CashfreePaymentController::class, 'handleReturn'])->name('customer.cashfree.return');
+Route::post('/payment/cashfree/webhook', [CashfreePaymentController::class, 'handleWebhook'])->name('payment.cashfree.webhook');
 
 Route::get(
     '/print/{token}/content',

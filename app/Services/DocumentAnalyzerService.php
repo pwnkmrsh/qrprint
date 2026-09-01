@@ -60,6 +60,10 @@ class DocumentAnalyzerService
             }
         } elseif ($fileType === 'pdf') {
             $metadata['page_count'] = $this->estimatePdfPages($filePath);
+        } elseif ($fileType === 'word') {
+            $metadata = array_merge($metadata, $this->extractWordMetadata($filePath, $extension));
+        } elseif ($fileType === 'powerpoint') {
+            $metadata = array_merge($metadata, $this->extractPowerpointMetadata($filePath, $extension));
         }
 
         return [
@@ -92,12 +96,60 @@ class DocumentAnalyzerService
             }
         }
 
-        // Fallback for .xls or if no sheets could be parsed
+        // Fallback for .xls, .csv or if no sheets could be parsed
         return ['Sheet1'];
     }
 
     /**
-     * Basic PDF page count estimation.
+     * Extract Word document (.docx) metadata such as page count.
+     */
+    public function extractWordMetadata(string $filePath, string $extension): array
+    {
+        $ext = strtolower(trim($extension, '.'));
+        if ($ext === 'docx' && class_exists('ZipArchive') && file_exists($filePath)) {
+            $zip = new ZipArchive();
+            if ($zip->open($filePath) === true) {
+                $xmlString = $zip->getFromName('docProps/app.xml');
+                $zip->close();
+
+                if ($xmlString && preg_match('/<Pages>(\d+)<\/Pages>/i', $xmlString, $matches)) {
+                    $pages = (int)$matches[1];
+                    if ($pages > 0) {
+                        return ['page_count' => $pages];
+                    }
+                }
+            }
+        }
+
+        return ['page_count' => 1];
+    }
+
+    /**
+     * Extract PowerPoint presentation (.pptx) metadata such as slide count.
+     */
+    public function extractPowerpointMetadata(string $filePath, string $extension): array
+    {
+        $ext = strtolower(trim($extension, '.'));
+        if ($ext === 'pptx' && class_exists('ZipArchive') && file_exists($filePath)) {
+            $zip = new ZipArchive();
+            if ($zip->open($filePath) === true) {
+                $xmlString = $zip->getFromName('docProps/app.xml');
+                $zip->close();
+
+                if ($xmlString && preg_match('/<Slides>(\d+)<\/Slides>/i', $xmlString, $matches)) {
+                    $slides = (int)$matches[1];
+                    if ($slides > 0) {
+                        return ['page_count' => $slides, 'slide_count' => $slides];
+                    }
+                }
+            }
+        }
+
+        return ['page_count' => 1, 'slide_count' => 1];
+    }
+
+    /**
+     * PDF page count estimation reading both header and trailer xref blocks.
      */
     private function estimatePdfPages(string $filePath): int
     {
@@ -106,14 +158,22 @@ class DocumentAnalyzerService
         }
 
         try {
-            $content = @file_get_contents($filePath, false, null, 0, 1024 * 500);
+            $fileSize = (int)@filesize($filePath);
+            $content = @file_get_contents($filePath, false, null, 0, min($fileSize, 1024 * 1024));
+            if ($fileSize > 1024 * 1024) {
+                $tail = @file_get_contents($filePath, false, null, max(0, $fileSize - 512 * 1024), 512 * 1024);
+                if ($tail) {
+                    $content .= $tail;
+                }
+            }
+
             if ($content && preg_match_all("/\/Count\s+(\d+)/", $content, $matches)) {
                 $max = max(array_map('intval', $matches[1]));
                 if ($max > 0) {
                     return $max;
                 }
             }
-            if ($content && preg_match_all("/\/Type\s*\/Page[^s]/", $content, $matches)) {
+            if ($content && preg_match_all("/\/Type\s*\/Page\b/", $content, $matches)) {
                 $count = count($matches[0]);
                 if ($count > 0) {
                     return $count;

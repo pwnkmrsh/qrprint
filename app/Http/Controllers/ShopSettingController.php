@@ -63,6 +63,11 @@ class ShopSettingController extends Controller
                 'show_currency' => (bool) $setting->show_currency,
                 'currency_symbol' => $setting->currency_symbol ?: '₹',
                 'payment_modes' => $setting->payment_modes ?: ['cash', 'upi', 'card', 'wallet'],
+                'gateway_provider' => $setting->gateway_provider,
+                'upi_id' => $setting->upi_id,
+                'merchant_name' => $setting->merchant_name,
+                'default_online_submode' => $setting->default_online_submode,
+                'webhook_secret' => $setting->webhook_secret ?: '',
                 'api_key_id' => $setting->api_key_id ?: '',
                 'secret_key' => $setting->secret_key ?: '',
                 'webhook_url' => $setting->webhook_url ?: $defaultWebhook,
@@ -338,7 +343,7 @@ class ShopSettingController extends Controller
     }
 
     /**
-     * Update Payment settings (Online, Counter, Currency, Payment modes, API key, Secret key, Webhook URL).
+     * Update Payment settings (Online, Counter, Currency, Payment modes, API key, Secret key, Webhook URL, Gateway Provider, UPI ID).
      */
     public function updatePayment(Request $request)
     {
@@ -352,10 +357,32 @@ class ShopSettingController extends Controller
             'currency_symbol' => ['required', 'string', 'max:10'],
             'payment_modes' => ['required', 'array'],
             'payment_modes.*' => ['string', 'in:cash,upi,card,wallet'],
+            'gateway_provider' => ['nullable', 'string', 'in:razorpay,phonepe,paytm,cashfree,direct_upi,stripe'],
+            'upi_id' => ['nullable', 'string', 'max:100'],
+            'merchant_name' => ['nullable', 'string', 'max:255'],
+            'default_online_submode' => ['nullable', 'string', 'in:upi,card,netbanking,wallet'],
             'api_key_id' => ['nullable', 'string', 'max:255'],
             'secret_key' => ['nullable', 'string', 'max:255'],
+            'webhook_secret' => ['nullable', 'string', 'max:255'],
             'webhook_url' => ['nullable', 'string', 'max:500'],
         ]);
+
+        $settingsData = $setting->settings ?? [];
+        if (isset($validated['gateway_provider'])) {
+            $settingsData['gateway_provider'] = $validated['gateway_provider'];
+        }
+        if (isset($validated['upi_id'])) {
+            $settingsData['upi_id'] = $validated['upi_id'];
+        }
+        if (isset($validated['merchant_name'])) {
+            $settingsData['merchant_name'] = $validated['merchant_name'];
+        }
+        if (isset($validated['default_online_submode'])) {
+            $settingsData['default_online_submode'] = $validated['default_online_submode'];
+        }
+        if (isset($validated['webhook_secret'])) {
+            $settingsData['webhook_secret'] = $validated['webhook_secret'];
+        }
 
         $setting->update([
             'online_payment_enabled' => $validated['online_payment_enabled'],
@@ -366,9 +393,10 @@ class ShopSettingController extends Controller
             'api_key_id' => $validated['api_key_id'] ?? null,
             'secret_key' => $validated['secret_key'] ?? null,
             'webhook_url' => $validated['webhook_url'] ?? null,
+            'settings' => $settingsData,
         ]);
 
-        return redirect()->back()->with('success', 'Payment settings updated successfully.');
+        return redirect()->back()->with('success', 'Payment gateway & UPI configuration saved successfully.');
     }
 
     /**

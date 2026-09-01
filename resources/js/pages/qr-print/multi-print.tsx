@@ -42,7 +42,10 @@ import {
     ChevronUp,
     Hash,
     BookOpen,
-    ShieldCheck
+    ShieldCheck,
+    Smartphone,
+    CreditCard,
+    ExternalLink
 } from 'lucide-react';
 import React, { ChangeEvent, useState } from 'react';
 
@@ -238,6 +241,11 @@ interface MultiPrintProps {
         show_currency: boolean;
         currency_symbol: string;
         payment_modes: string[];
+        gateway_provider?: string;
+        upi_id?: string;
+        merchant_name?: string;
+        default_online_submode?: string;
+        api_key_id?: string;
     };
     limits: {
         max_files: number;
@@ -260,8 +268,14 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
     const canCounter = shopSettings?.counter_payment_enabled !== false;
     const canOnline = shopSettings?.online_payment_enabled !== false;
 
-    // Selected Payment Method ('counter' | 'online')
-    const [paymentMethod, setPaymentMethod] = useState<'counter' | 'online'>(canCounter ? 'counter' : 'online');
+    // Selected Payment Method ('counter' | 'online') - Default to Online if available
+    const [paymentMethod, setPaymentMethod] = useState<'counter' | 'online'>(canOnline ? 'online' : 'counter');
+
+    // Selected Online Sub-Mode ('upi' | 'card') - Default to UPI
+    const [onlineSubMode, setOnlineSubMode] = useState<'upi' | 'card'>(
+        shopSettings?.default_online_submode === 'card' ? 'card' : 'upi'
+    );
+    const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
 
     // Active sheet selection modal state
     const [activeSheetModalFileIndex, setActiveSheetModalFileIndex] = useState<number | null>(null);
@@ -278,88 +292,138 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
         );
     };
 
-    // Handle File Upload
-    const handleFilesSelected = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || e.target.files.length === 0) return;
+    const [isDragging, setIsDragging] = useState<boolean>(false);
+    const [uploadProgressText, setUploadProgressText] = useState<string | null>(null);
 
-        const selectedFiles = Array.from(e.target.files);
+    // Handle File Upload
+    const processFiles = async (selectedFiles: File[]) => {
+        if (selectedFiles.length === 0) return;
+
         if (files.length + selectedFiles.length > limits.max_files) {
-            setGlobalError(`You can upload a maximum of ${limits.max_files} files per print session.`);
+            setGlobalError(`You can upload a maximum of ${limits.max_files} files per print session. (Currently ${files.length}, trying to add ${selectedFiles.length})`);
             return;
         }
 
         // Validate file size and extensions
+        const validFiles: File[] = [];
+        const invalidErrors: string[] = [];
+
         for (const file of selectedFiles) {
             const ext = file.name.split('.').pop()?.toLowerCase() || '';
             if (!limits.allowed_extensions.includes(ext)) {
-                setGlobalError(`File "${file.name}" has an unsupported format. Supported: ${limits.allowed_extensions.join(', ')}`);
-                return;
+                invalidErrors.push(`"${file.name}" has an unsupported format (.${ext}).`);
+                continue;
             }
             if (file.size > limits.max_file_size_mb * 1024 * 1024) {
-                setGlobalError(`File "${file.name}" exceeds the maximum allowed size of ${limits.max_file_size_mb} MB.`);
-                return;
+                invalidErrors.push(`"${file.name}" exceeds the ${limits.max_file_size_mb} MB limit.`);
+                continue;
             }
+            validFiles.push(file);
         }
 
-        setGlobalError(null);
+        if (invalidErrors.length > 0 && validFiles.length === 0) {
+            setGlobalError(invalidErrors.join(' '));
+            return;
+        }
+
+        setGlobalError(invalidErrors.length > 0 ? invalidErrors.join(' ') : null);
         setIsUploading(true);
 
-        const formData = new FormData();
-        selectedFiles.forEach((file) => {
-            formData.append('documents[]', file);
-        });
-
         const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const uploadedDocs: UploadedFile[] = [];
+        const uploadErrors: string[] = [];
 
-        try {
-            const response = await fetch(qrPrint.upload_url, {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'X-CSRF-TOKEN': csrf,
-                },
-                body: formData,
-            });
+        for (let i = 0; i < validFiles.length; i++) {
+            const file = validFiles[i];
+            setUploadProgressText(`Uploading ${i + 1} of ${validFiles.length}: ${file.name}...`);
 
-            const data = await response.json();
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || 'Failed to upload files.');
+            const formData = new FormData();
+            formData.append('documents[]', file);
+
+            try {
+                const response = await fetch(qrPrint.upload_url, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                    },
+                    body: formData,
+                });
+
+                let data: any = null;
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    if (response.status === 413) {
+                        throw new Error(`File "${file.name}" exceeds server upload limits.`);
+                    }
+                    if (response.status === 419) {
+                        throw new Error('Session expired. Please refresh the page and try again.');
+                    }
+                    throw new Error(`Server returned error (${response.status}) for "${file.name}".`);
+                }
+
+                if (!response.ok || !data?.success) {
+                    let msg = data?.message;
+                    if (data?.errors) {
+                        const errArr = Array.isArray(data.errors)
+                            ? data.errors
+                            : Object.values(data.errors).flat();
+                        if (errArr.length > 0) msg = errArr.join(' ');
+                    }
+                    throw new Error(msg || `Failed to upload "${file.name}".`);
+                }
+
+                const newMappedFiles: UploadedFile[] = (data.documents || []).map((doc: any) => {
+                    const detectedSheets = doc.metadata?.sheets || [];
+                    return {
+                        id: doc.id,
+                        original_name: doc.original_name,
+                        file_size: doc.file_size,
+                        file_type: doc.file_type,
+                        file_url: doc.file_url,
+                        metadata: doc.metadata || {},
+                        copies: 1,
+                        orientation: 'auto',
+                        color_mode: 'bw',
+                        paper_size: 'A4',
+                        scaling: doc.file_type === 'excel' ? 'fit_to_page' : 'actual',
+                        duplex: 'off',
+                        page_selection_type: 'all',
+                        page_range: '',
+                        selected_sheets: doc.file_type === 'excel' && detectedSheets.length > 0 ? [detectedSheets[0]] : [],
+                        margins: 'normal',
+                        page_order: 'down_then_over',
+                        gridlines: false,
+                        row_col_headers: false,
+                        image_position: 'center',
+                    };
+                });
+
+                uploadedDocs.push(...newMappedFiles);
+            } catch (err: any) {
+                uploadErrors.push(err.message || `Failed to upload "${file.name}".`);
             }
-
-            // Map incoming documents to UploadedFile with default print options
-            const newFiles: UploadedFile[] = data.documents.map((doc: any) => {
-                const detectedSheets = doc.metadata?.sheets || [];
-                return {
-                    id: doc.id,
-                    original_name: doc.original_name,
-                    file_size: doc.file_size,
-                    file_type: doc.file_type,
-                    file_url: doc.file_url,
-                    metadata: doc.metadata || {},
-                    copies: 1,
-                    orientation: 'auto',
-                    color_mode: 'bw',
-                    paper_size: 'A4',
-                    scaling: doc.file_type === 'excel' ? 'fit_to_page' : 'actual',
-                    duplex: 'off',
-                    page_selection_type: 'all',
-                    page_range: '',
-                    selected_sheets: doc.file_type === 'excel' && detectedSheets.length > 0 ? [detectedSheets[0]] : [],
-                    margins: 'normal',
-                    page_order: 'down_then_over',
-                    gridlines: false,
-                    row_col_headers: false,
-                    image_position: 'center',
-                };
-            });
-
-            setFiles((prev) => [...prev, ...newFiles]);
-        } catch (err: any) {
-            setGlobalError(err.message || 'Failed to upload files. Please try again.');
-        } finally {
-            setIsUploading(false);
-            e.target.value = '';
         }
+
+        if (uploadedDocs.length > 0) {
+            setFiles((prev) => [...prev, ...uploadedDocs]);
+        }
+
+        if (uploadErrors.length > 0) {
+            setGlobalError(uploadErrors.join(' '));
+        }
+
+        setIsUploading(false);
+        setUploadProgressText(null);
+    };
+
+    const handleFilesSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const selectedFiles = Array.from(e.target.files);
+        e.target.value = '';
+        await processFiles(selectedFiles);
     };
 
     // Remove single file
@@ -474,8 +538,10 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
         setIsCreatingSession(true);
         const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
+        const finalPaymentMethod = paymentMethod === 'online' ? (onlineSubMode === 'card' ? 'card' : 'upi') : 'counter';
+
         const payload = {
-            payment_method: paymentMethod,
+            payment_method: finalPaymentMethod,
             files: files.map((file) => ({
                 document_id: file.id,
                 copies: file.copies,
@@ -512,6 +578,48 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                 throw new Error(data.message || 'Failed to initialize print session.');
             }
 
+            // If paying online via Card / Gateway and Cashfree is configured
+            if (paymentMethod === 'online' && onlineSubMode === 'card' && data.session_uuid) {
+                try {
+                    const cfRes = await fetch(route('qr-print.cashfree.create-order', qrPrint.token), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Accept: 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: JSON.stringify({
+                            session_uuid: data.session_uuid,
+                        }),
+                    });
+
+                    const cfData = await cfRes.json();
+                    if (cfRes.ok && cfData.success && cfData.payment_session_id) {
+                        // Dynamically load Cashfree JS SDK v3
+                        if (!(window as any).Cashfree) {
+                            const script = document.createElement('script');
+                            script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+                            document.body.appendChild(script);
+                            await new Promise((resolve) => {
+                                script.onload = resolve;
+                            });
+                        }
+
+                        const cashfree = (window as any).Cashfree({
+                            mode: cfData.environment === 'production' ? 'production' : 'sandbox',
+                        });
+
+                        cashfree.checkout({
+                            paymentSessionId: cfData.payment_session_id,
+                            redirectTarget: '_self',
+                        });
+                        return;
+                    }
+                } catch (cfErr) {
+                    console.warn('Cashfree SDK initialization fallback to standard status page', cfErr);
+                }
+            }
+
             // Navigate to live session tracking
             if (data.status_url) {
                 router.visit(data.status_url);
@@ -541,6 +649,25 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
 
     const totalCalculatedCost = calculateTotalCost();
     const totalImpressions = calculateTotalImpressions();
+
+    const shopUpiId = shopSettings?.upi_id || (qrPrint.mobile_number ? `${qrPrint.mobile_number.replace(/\D/g, '')}@upi` : 'merchant@upi');
+    const shopMerchantName = shopSettings?.merchant_name || shopSettings?.shop_name || qrPrint.title;
+    
+    // Construct dynamic UPI Intent URI
+    const upiUri = `upi://pay?pa=${encodeURIComponent(shopUpiId)}&pn=${encodeURIComponent(shopMerchantName)}&am=${totalCalculatedCost.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Print at ${qrPrint.title}`)}`;
+    const gpayUri = `gpay://upi/pay?pa=${encodeURIComponent(shopUpiId)}&pn=${encodeURIComponent(shopMerchantName)}&am=${totalCalculatedCost.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Print at ${qrPrint.title}`)}`;
+    const phonepeUri = `phonepe://pay?pa=${encodeURIComponent(shopUpiId)}&pn=${encodeURIComponent(shopMerchantName)}&am=${totalCalculatedCost.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Print at ${qrPrint.title}`)}`;
+    const paytmUri = `paytmmp://pay?pa=${encodeURIComponent(shopUpiId)}&pn=${encodeURIComponent(shopMerchantName)}&am=${totalCalculatedCost.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Print at ${qrPrint.title}`)}`;
+
+    const qrCodeImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUri)}`;
+
+    const handleCopyUpiId = () => {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(shopUpiId);
+            setCopiedUpi(true);
+            setTimeout(() => setCopiedUpi(false), 2000);
+        }
+    };
 
     if (qrPrint.is_active === false) {
         return (
@@ -620,7 +747,25 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                     )}
 
                     {/* Upload Zone */}
-                    <Card className="border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors shadow-xs">
+                    <Card 
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsDragging(true);
+                        }}
+                        onDragLeave={() => setIsDragging(false)}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            setIsDragging(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                                processFiles(Array.from(e.dataTransfer.files));
+                            }
+                        }}
+                        className={`border-2 border-dashed transition-all shadow-xs ${
+                            isDragging 
+                                ? 'border-primary bg-primary/15 scale-[1.01]' 
+                                : 'border-primary/30 bg-primary/5 hover:bg-primary/10'
+                        }`}
+                    >
                         <CardContent className="p-6 text-center">
                             <label className="cursor-pointer flex flex-col items-center justify-center space-y-3">
                                 <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -634,10 +779,10 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                 </div>
                                 <div className="space-y-1 text-xs text-muted-foreground">
                                     <p className="font-medium text-foreground">
-                                        Supported: PDF, Excel, Word, PowerPoint, JPG, PNG, WEBP
+                                        Supported: PDF, Excel, Word, PowerPoint, JPG, PNG, WEBP, CSV
                                     </p>
                                     <p>
-                                        Up to {limits.max_files} files · Maximum {limits.max_file_size_mb} MB per file
+                                        Drag & drop or tap to browse · Up to {limits.max_files} files · Max {limits.max_file_size_mb} MB per file
                                     </p>
                                 </div>
                                 <input
@@ -651,9 +796,9 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                             </label>
 
                             {isUploading && (
-                                <div className="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-primary">
+                                <div className="mt-4 flex items-center justify-center gap-2 text-xs font-semibold text-primary animate-pulse">
                                     <Loader2 className="size-4 animate-spin" />
-                                    Analyzing & uploading files…
+                                    {uploadProgressText || 'Analyzing & uploading files…'}
                                 </div>
                             )}
                         </CardContent>
@@ -1151,60 +1296,30 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                             {/* Payment Options Selection Box */}
                             <Card className="border border-border shadow-xs overflow-hidden">
                                 <CardHeader className="bg-muted/15 border-b pb-3">
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                        <Banknote className="size-4 text-primary" />
-                                        Select Payment Method
+                                    <CardTitle className="text-base flex items-center justify-between">
+                                        <span className="flex items-center gap-2">
+                                            <Banknote className="size-4 text-primary" />
+                                            Select Payment Option
+                                        </span>
+                                        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-medium">
+                                            <ShieldCheck className="size-3 mr-1 inline" />
+                                            Instant & Verified
+                                        </Badge>
                                     </CardTitle>
                                     <CardDescription className="text-xs">
-                                        Choose how you would like to pay for your print order.
+                                        Choose your preferred payment method. Online payments via UPI are processed and spooled instantly.
                                     </CardDescription>
                                 </CardHeader>
-                                <CardContent className="p-4 space-y-3">
+                                <CardContent className="p-4 space-y-4">
+                                    {/* Primary Payment Mode Selection */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {/* Option 1: Pay at Counter */}
-                                        {canCounter && (
-                                            <label
-                                                onClick={() => setPaymentMethod('counter')}
-                                                className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all ${
-                                                    paymentMethod === 'counter'
-                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                                                        : 'border-input bg-card hover:bg-muted/30'
-                                                }`}
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="payment_method"
-                                                    value="counter"
-                                                    checked={paymentMethod === 'counter'}
-                                                    onChange={() => setPaymentMethod('counter')}
-                                                    className="sr-only"
-                                                />
-                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
-                                                    <Store className="size-5" />
-                                                </div>
-                                                <div className="flex-1 space-y-1">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="font-bold text-sm text-foreground">
-                                                            Pay at Shop Counter
-                                                        </span>
-                                                        <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold">
-                                                            Cash / UPI
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                                        Spools job to printer immediately. Pay in cash or QR at counter when collecting printout.
-                                                    </p>
-                                                </div>
-                                            </label>
-                                        )}
-
-                                        {/* Option 2: Pay Online */}
+                                        {/* Option 1: Pay Online (UPI / Card) - Pre-selected by default */}
                                         {canOnline && (
                                             <label
                                                 onClick={() => setPaymentMethod('online')}
                                                 className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all ${
                                                     paymentMethod === 'online'
-                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary shadow-xs'
                                                         : 'border-input bg-card hover:bg-muted/30'
                                                 }`}
                                             >
@@ -1225,16 +1340,209 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                                             Pay Online (UPI / Card)
                                                         </span>
                                                         <Badge variant="secondary" className="text-[10px] bg-blue-500/10 text-blue-600 font-bold">
-                                                            Instant
+                                                            Recommended
                                                         </Badge>
                                                     </div>
                                                     <p className="text-xs text-muted-foreground leading-relaxed">
-                                                        Fast digital payment via GPay, PhonePe, Paytm, BHIM UPI, or Cards.
+                                                        Instant payment via Google Pay, PhonePe, Paytm, BHIM UPI or Cards.
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        )}
+
+                                        {/* Option 2: Pay at Counter */}
+                                        {canCounter && (
+                                            <label
+                                                onClick={() => setPaymentMethod('counter')}
+                                                className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all ${
+                                                    paymentMethod === 'counter'
+                                                        ? 'border-primary bg-primary/5 ring-1 ring-primary shadow-xs'
+                                                        : 'border-input bg-card hover:bg-muted/30'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="payment_method"
+                                                    value="counter"
+                                                    checked={paymentMethod === 'counter'}
+                                                    onChange={() => setPaymentMethod('counter')}
+                                                    className="sr-only"
+                                                />
+                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                                                    <Store className="size-5" />
+                                                </div>
+                                                <div className="flex-1 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-sm text-foreground">
+                                                            Pay at Shop Counter
+                                                        </span>
+                                                        <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold">
+                                                            Cash / QR
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                                        Job spools to printer immediately. Pay in cash or QR at counter upon collection.
                                                     </p>
                                                 </div>
                                             </label>
                                         )}
                                     </div>
+
+                                    {/* Online Payment Sub-selection & Dynamic UPI QR Section */}
+                                    {paymentMethod === 'online' && (
+                                        <div className="p-4 rounded-2xl border border-primary/20 bg-gradient-to-b from-primary/5 via-background to-muted/20 space-y-4">
+                                            {/* Sub-mode Tabs (UPI vs Card) */}
+                                            <div className="flex items-center justify-between border-b pb-3">
+                                                <div className="space-y-0.5">
+                                                    <span className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                                                        <Smartphone className="size-4 text-primary" />
+                                                        Online Payment Method
+                                                    </span>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        UPI is selected by default for fast mobile checkout.
+                                                    </p>
+                                                </div>
+                                                <div className="flex bg-muted/60 p-1 rounded-lg border">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOnlineSubMode('upi')}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                            onlineSubMode === 'upi'
+                                                                ? 'bg-primary text-primary-foreground shadow-xs'
+                                                                : 'text-muted-foreground hover:text-foreground'
+                                                        }`}
+                                                    >
+                                                        <QrCode className="size-3.5" />
+                                                        UPI (Default)
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setOnlineSubMode('card')}
+                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                            onlineSubMode === 'card'
+                                                                ? 'bg-primary text-primary-foreground shadow-xs'
+                                                                : 'text-muted-foreground hover:text-foreground'
+                                                        }`}
+                                                    >
+                                                        <CreditCard className="size-3.5" />
+                                                        Card / NetBanking
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Sub-option 1: UPI Dynamic QR & App Intent (Default Active) */}
+                                            {onlineSubMode === 'upi' && (
+                                                <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
+                                                    {/* QR Code Container */}
+                                                    <div className="flex flex-col items-center justify-center p-3 rounded-xl border bg-background shadow-xs text-center">
+                                                        <img
+                                                            src={qrCodeImgUrl}
+                                                            alt="Scan UPI QR"
+                                                            className="size-36 object-contain rounded-md"
+                                                        />
+                                                        <span className="text-[11px] font-bold text-foreground mt-2">
+                                                            Scan & Pay {sym}{totalCalculatedCost.toFixed(2)}
+                                                        </span>
+                                                        <span className="text-[9px] text-muted-foreground">
+                                                            Any UPI Scanner App
+                                                        </span>
+                                                    </div>
+
+                                                    {/* UPI Details & Mobile App Trigger Links */}
+                                                    <div className="space-y-3">
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-xs font-semibold text-foreground">
+                                                                    Merchant UPI VPA
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleCopyUpiId}
+                                                                    className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                                                                >
+                                                                    {copiedUpi ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                                                                    {copiedUpi ? 'Copied' : 'Copy ID'}
+                                                                </button>
+                                                            </div>
+                                                            <div className="p-2.5 rounded-lg border bg-background font-mono text-xs text-foreground flex items-center justify-between">
+                                                                <span className="truncate">{shopUpiId}</span>
+                                                                <Badge variant="outline" className="text-[10px] py-0 px-1.5 shrink-0">
+                                                                    {shopMerchantName}
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* 1-Tap App Deep-links for Mobile Users */}
+                                                        <div className="space-y-1.5">
+                                                            <span className="text-[11px] font-semibold text-muted-foreground block">
+                                                                Or Open Directly in UPI App:
+                                                            </span>
+                                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                                <a
+                                                                    href={gpayUri}
+                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-foreground"
+                                                                >
+                                                                    <span className="text-blue-500 font-extrabold">G</span>Pay
+                                                                </a>
+                                                                <a
+                                                                    href={phonepeUri}
+                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-foreground"
+                                                                >
+                                                                    <span className="text-purple-600 font-extrabold">Ph</span>onePe
+                                                                </a>
+                                                                <a
+                                                                    href={paytmUri}
+                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-foreground"
+                                                                >
+                                                                    <span className="text-sky-500 font-extrabold">Pay</span>tm
+                                                                </a>
+                                                                <a
+                                                                    href={upiUri}
+                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-primary"
+                                                                >
+                                                                    <ExternalLink className="size-3" /> Any UPI
+                                                                </a>
+                                                            </div>
+                                                        </div>
+
+                                                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-0.5">
+                                                            <Sparkles className="size-3.5 text-primary shrink-0" />
+                                                            <span>Once payment is initiated, click the button below to dispatch print jobs.</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Sub-option 2: Debit / Credit Card / NetBanking */}
+                                            {onlineSubMode === 'card' && (
+                                                <div className="p-4 rounded-xl border bg-background shadow-xs space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <CreditCard className="size-5 text-blue-600" />
+                                                            <span className="font-bold text-sm text-foreground">
+                                                                Debit & Credit Card Gateway
+                                                            </span>
+                                                        </div>
+                                                        <Badge variant="outline" className="text-[10px]">
+                                                            {shopSettings?.gateway_provider ? shopSettings.gateway_provider.toUpperCase() : 'RAZORPAY'}
+                                                        </Badge>
+                                                    </div>
+
+                                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                                        Supports Visa, MasterCard, RuPay, Maestro, Corporate NetBanking and digital wallet balances.
+                                                    </p>
+
+                                                    <div className="flex flex-wrap gap-2 pt-1">
+                                                        <Badge variant="secondary" className="text-[10px]">Visa</Badge>
+                                                        <Badge variant="secondary" className="text-[10px]">MasterCard</Badge>
+                                                        <Badge variant="secondary" className="text-[10px]">RuPay</Badge>
+                                                        <Badge variant="secondary" className="text-[10px]">NetBanking (50+ Banks)</Badge>
+                                                        <Badge variant="secondary" className="text-[10px]">Wallets</Badge>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
 
@@ -1283,7 +1591,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                         <div className="mx-auto max-w-4xl flex items-center justify-between gap-4">
                             <div>
                                 <div className="text-xs text-muted-foreground font-medium">
-                                    Total ({files.length} files) · {paymentMethod === 'counter' ? 'Pay at Counter' : 'Online Payment'}
+                                    Total ({files.length} files) · {paymentMethod === 'counter' ? 'Pay at Counter' : `Online (${onlineSubMode.toUpperCase()})`}
                                 </div>
                                 <div className="text-xl sm:text-2xl font-black text-primary">
                                     {sym}{totalCalculatedCost.toFixed(2)}
@@ -1291,7 +1599,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                             </div>
 
                             <Button
-                                className="w-full sm:w-auto min-w-[240px] text-base font-bold shadow-md py-6 gap-2 rounded-xl"
+                                className="w-full sm:w-auto min-w-[260px] text-base font-bold shadow-md py-6 gap-2 rounded-xl"
                                 size="lg"
                                 onClick={handlePrintAll}
                                 disabled={isCreatingSession || files.length === 0}
@@ -1303,10 +1611,22 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                     </>
                                 ) : (
                                     <>
-                                        <Printer className="size-5" />
-                                        {paymentMethod === 'counter'
-                                            ? `🖨️ Pay at Counter & Print (${sym}${totalCalculatedCost.toFixed(2)})`
-                                            : `💳 Pay Online & Print (${sym}${totalCalculatedCost.toFixed(2)})`}
+                                        {paymentMethod === 'counter' ? (
+                                            <>
+                                                <Printer className="size-5" />
+                                                🖨️ Pay at Counter & Print ({sym}{totalCalculatedCost.toFixed(2)})
+                                            </>
+                                        ) : onlineSubMode === 'upi' ? (
+                                            <>
+                                                <QrCode className="size-5" />
+                                                🟢 Pay via UPI & Print ({sym}{totalCalculatedCost.toFixed(2)})
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CreditCard className="size-5" />
+                                                💳 Pay via Card & Print ({sym}{totalCalculatedCost.toFixed(2)})
+                                            </>
+                                        )}
                                     </>
                                 )}
                             </Button>

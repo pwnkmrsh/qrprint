@@ -228,20 +228,11 @@ class DashboardController extends Controller
             'payment_method' => ['required', 'string', 'in:cash,upi,card,counter'],
         ]);
 
-        // Update the print session on counter payment validation
-        $session->update([
-            'payment_status' => 'paid',
-            'payment_method' => $validated['payment_method'],
-            'paid_at' => now(),
-            'paid_by' => $user->id,
-            'print_status' => 'ready_to_print',
-        ]);
-
-        // Put all pending_payment jobs of this session into the print queue (pending) and update payment method
-        $session->jobs()->where('status', 'pending_payment')->update([
-            'status' => 'pending',
-            'payment_method' => $validated['payment_method'],
-        ]);
+        app(\App\Services\PaymentManagerService::class)->recordCounterPayment(
+            $session,
+            $user,
+            $validated['payment_method']
+        );
 
         return redirect()->back()->with('success', "Payment of {$session->currency}{$session->total_amount} collected successfully.");
     }

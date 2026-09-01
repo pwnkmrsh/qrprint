@@ -19,8 +19,14 @@ class PrintAgentController extends Controller
         $agentId = $request->input('agent_id', 'AGENT-001');
         \Cache::put("agent_{$agentId}_last_seen", now()->toDateTimeString(), 300);
 
+        // Strictly retrieve jobs that are in 'pending' status AND belonging to a PAID session
         $jobs = PrintJob::with(['document', 'session'])
             ->where('status', 'pending')
+            ->where(function ($query) {
+                $query->whereHas('session', function ($sessionQuery) {
+                    $sessionQuery->where('payment_status', 'paid');
+                })->orWhereNull('print_session_id'); // Support direct test prints without session
+            })
             ->orderBy('created_at')
             ->limit(10)
             ->get();

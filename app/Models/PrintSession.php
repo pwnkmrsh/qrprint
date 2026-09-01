@@ -54,6 +54,16 @@ class PrintSession extends Model
         return $this->belongsTo(User::class, 'paid_by');
     }
 
+    public function payments()
+    {
+        return $this->hasMany(Payment::class, 'print_session_id');
+    }
+
+    public function latestPayment()
+    {
+        return $this->hasOne(Payment::class, 'print_session_id')->latestOfMany();
+    }
+
     public function getFormattedOrderIdAttribute(): string
     {
         return sprintf('Q2P-%06d', $this->id);

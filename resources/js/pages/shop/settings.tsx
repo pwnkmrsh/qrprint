@@ -26,7 +26,9 @@ import {
     ShieldCheck, 
     Sparkles,
     AlertCircle,
-    ScanLine
+    ScanLine,
+    QrCode,
+    Smartphone
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -91,6 +93,11 @@ interface ShopSettingsProps {
         show_currency: boolean;
         currency_symbol: string;
         payment_modes: string[];
+        gateway_provider?: string;
+        upi_id?: string;
+        merchant_name?: string;
+        default_online_submode?: string;
+        webhook_secret?: string;
         api_key_id: string;
         secret_key: string;
         webhook_url: string;
@@ -153,8 +160,13 @@ export default function ShopSettings({
         show_currency: settings.show_currency,
         currency_symbol: settings.currency_symbol,
         payment_modes: settings.payment_modes,
+        gateway_provider: settings.gateway_provider || 'razorpay',
+        upi_id: settings.upi_id || '',
+        merchant_name: settings.merchant_name || settings.shop_name || '',
+        default_online_submode: settings.default_online_submode || 'upi',
         api_key_id: settings.api_key_id,
         secret_key: settings.secret_key,
+        webhook_secret: settings.webhook_secret || '',
         webhook_url: settings.webhook_url,
     });
 
@@ -999,10 +1011,10 @@ export default function ShopSettings({
                     <Card className="border-border shadow-xs">
                         <CardHeader>
                             <CardTitle className="text-xl flex items-center gap-2">
-                                <CreditCard className="w-5 h-5 text-primary" /> Payment Gateway & Modes Settings
+                                <CreditCard className="w-5 h-5 text-primary" /> Payment Gateway & UPI Configuration
                             </CardTitle>
                             <CardDescription>
-                                Enable online payments, counter cash collections, configure currency formatting, and manage gateway credentials.
+                                Configure online payment gateway, direct UPI VPA, default checkout options (Pay Online with UPI selected by default), and API credentials.
                             </CardDescription>
                         </CardHeader>
                         <form onSubmit={handlePaymentSubmit}>
@@ -1043,7 +1055,192 @@ export default function ShopSettings({
                                     </div>
                                 </div>
 
-                                {/* Payment Modes Multi-Selector */}
+                                {/* Section 1: Payment Gateway Provider Selection */}
+                                <div className="space-y-3 pt-2">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <Label className="text-sm font-semibold text-foreground">Payment Gateway Provider</Label>
+                                            <p className="text-xs text-muted-foreground">Choose your payment aggregator or direct bank UPI routing for online payments.</p>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+                                            UPI + Card Supported
+                                        </Badge>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                        {[
+                                            {
+                                                id: 'razorpay',
+                                                name: 'Razorpay',
+                                                badge: 'Recommended',
+                                                desc: 'Instant UPI Intent, Dynamic QR, Cards, NetBanking & Auto-webhooks',
+                                            },
+                                            {
+                                                id: 'phonepe',
+                                                name: 'PhonePe Payment Gateway',
+                                                badge: 'Popular',
+                                                desc: 'Direct PhonePe UPI Switch, Merchant QR, Cards & Fast Settlements',
+                                            },
+                                            {
+                                                id: 'paytm',
+                                                name: 'Paytm Payment Gateway',
+                                                badge: 'All-in-One',
+                                                desc: 'Paytm UPI, QR, Postpaid, Wallets & Debit/Credit Cards',
+                                            },
+                                            {
+                                                id: 'cashfree',
+                                                name: 'Cashfree Payments',
+                                                badge: 'Low Fee',
+                                                desc: 'Seamless UPI Intent, Card tokenization & instant webhooks',
+                                            },
+                                            {
+                                                id: 'direct_upi',
+                                                name: 'Direct UPI VPA / QR',
+                                                badge: '0% Fee',
+                                                desc: 'Direct bank transfer to your UPI ID without intermediate gateway fee',
+                                            },
+                                            {
+                                                id: 'stripe',
+                                                name: 'Stripe Payments',
+                                                badge: 'Global',
+                                                desc: 'International credit & debit cards with 3D Secure verification',
+                                            },
+                                        ].map((prov) => {
+                                            const isSelected = paymentForm.data.gateway_provider === prov.id;
+                                            return (
+                                                <button
+                                                    key={prov.id}
+                                                    type="button"
+                                                    onClick={() => paymentForm.setData('gateway_provider', prov.id)}
+                                                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                                        isSelected
+                                                            ? 'border-primary bg-primary/5 shadow-xs text-foreground ring-2 ring-primary/40'
+                                                            : 'border-border bg-background text-muted-foreground hover:border-border/80'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="font-semibold text-sm text-foreground">{prov.name}</span>
+                                                        <Badge variant={isSelected ? 'default' : 'secondary'} className="text-[10px] py-0 px-1.5 font-normal">
+                                                            {prov.badge}
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground line-clamp-2">{prov.desc}</p>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Section 2: UPI Configuration & Default Online Mode */}
+                                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <QrCode className="w-5 h-5 text-primary" />
+                                            <h4 className="font-semibold text-sm text-foreground">Pay Online: Default Mode & UPI Configuration</h4>
+                                        </div>
+                                        <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-xs">
+                                            Default: UPI Selected
+                                        </Badge>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="upi_id" className="text-xs font-semibold">
+                                                Shop UPI ID / VPA <span className="text-rose-500">*</span>
+                                            </Label>
+                                            <Input
+                                                id="upi_id"
+                                                placeholder="e.g. 9876543210@paytm or shop@okhdfcbank"
+                                                value={paymentForm.data.upi_id}
+                                                onChange={(e) => paymentForm.setData('upi_id', e.target.value)}
+                                                className="bg-background text-sm font-mono"
+                                            />
+                                            <p className="text-[11px] text-muted-foreground">
+                                                Used to generate dynamic UPI QR code on customer checkout (GPay, PhonePe, Paytm, BHIM).
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="merchant_name" className="text-xs font-semibold">
+                                                UPI Merchant Display Name
+                                            </Label>
+                                            <Input
+                                                id="merchant_name"
+                                                placeholder="e.g. ABC Cyber Cafe"
+                                                value={paymentForm.data.merchant_name}
+                                                onChange={(e) => paymentForm.setData('merchant_name', e.target.value)}
+                                                className="bg-background text-sm"
+                                            />
+                                            <p className="text-[11px] text-muted-foreground">
+                                                Name shown to customers inside Google Pay / PhonePe when scanning the QR code.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Default Online Mode Sub-selector */}
+                                    <div className="pt-2 border-t border-primary/10">
+                                        <Label className="text-xs font-semibold block mb-2">Default Online Payment Sub-option</Label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <label
+                                                onClick={() => paymentForm.setData('default_online_submode', 'upi')}
+                                                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                                    paymentForm.data.default_online_submode === 'upi'
+                                                        ? 'bg-background border-primary ring-1 ring-primary text-foreground shadow-xs'
+                                                        : 'bg-background/60 border-border text-muted-foreground hover:bg-background'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="default_online_submode"
+                                                    value="upi"
+                                                    checked={paymentForm.data.default_online_submode === 'upi'}
+                                                    onChange={() => paymentForm.setData('default_online_submode', 'upi')}
+                                                    className="sr-only"
+                                                />
+                                                <div className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                                                    <Smartphone className="size-4" />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-xs text-foreground">UPI (GPay / PhonePe / Paytm / QR)</span>
+                                                        <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold py-0">
+                                                            Recommended
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="text-[11px] text-muted-foreground">Pre-selects instant UPI QR code & app intent links for customers.</p>
+                                                </div>
+                                            </label>
+
+                                            <label
+                                                onClick={() => paymentForm.setData('default_online_submode', 'card')}
+                                                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                                    paymentForm.data.default_online_submode === 'card'
+                                                        ? 'bg-background border-primary ring-1 ring-primary text-foreground shadow-xs'
+                                                        : 'bg-background/60 border-border text-muted-foreground hover:bg-background'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="default_online_submode"
+                                                    value="card"
+                                                    checked={paymentForm.data.default_online_submode === 'card'}
+                                                    onChange={() => paymentForm.setData('default_online_submode', 'card')}
+                                                    className="sr-only"
+                                                />
+                                                <div className="size-8 rounded-md bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                    <CreditCard className="size-4" />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-xs text-foreground">Debit / Credit Card / NetBanking</span>
+                                                    </div>
+                                                    <p className="text-[11px] text-muted-foreground">Pre-selects card & netbanking gateway checkout.</p>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Section 3: Accepted Payment Modes Multi-Selector */}
                                 <div className="space-y-3 pt-2">
                                     <Label className="text-sm font-semibold">Accepted Payment Modes</Label>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1080,10 +1277,10 @@ export default function ShopSettings({
                                     </div>
                                 </div>
 
-                                {/* API Key & Secret Group */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
+                                {/* Section 4: API Key & Secret Group */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-border">
                                     <div className="space-y-2">
-                                        <Label htmlFor="api_key_id">Gateway API Key ID</Label>
+                                        <Label htmlFor="api_key_id">Gateway API Key ID / Merchant ID</Label>
                                         <Input
                                             id="api_key_id"
                                             placeholder="e.g. rzp_live_xxxxxxxxxxxxxx"
@@ -1112,11 +1309,22 @@ export default function ShopSettings({
                                                 {showSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                             </button>
                                         </div>
-                                        <p className="text-xs text-muted-foreground">Never share your secret key. Stored encrypted.</p>
+                                        <p className="text-xs text-muted-foreground">Never share your secret key. Stored securely.</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="webhook_secret">Webhook Secret / Signing Key</Label>
+                                        <Input
+                                            id="webhook_secret"
+                                            placeholder="e.g. whsec_xxxxxxxxxxxxxx"
+                                            value={paymentForm.data.webhook_secret}
+                                            onChange={(e) => paymentForm.setData('webhook_secret', e.target.value)}
+                                        />
+                                        <p className="text-xs text-muted-foreground">Used to cryptographically verify payment notifications.</p>
                                     </div>
                                 </div>
 
-                                {/* Webhook URL Copyable Box */}
+                                {/* Section 5: Webhook URL Copyable Box */}
                                 <div className="space-y-2 pt-2">
                                     <Label htmlFor="webhook_url">Webhook Notification Endpoint</Label>
                                     <div className="flex gap-2">
@@ -1137,12 +1345,78 @@ export default function ShopSettings({
                                         </Button>
                                     </div>
                                     <p className="text-xs text-muted-foreground">
-                                        Paste this URL into your payment gateway dashboard (Razorpay, Stripe, Paytm) to receive instant print trigger webhooks.
+                                        Paste this URL into your payment gateway dashboard (Razorpay, PhonePe, Paytm, Stripe) to receive instant print trigger webhooks.
                                     </p>
+                                </div>
+
+                                {/* Section 6: Customer Checkout Experience Preview */}
+                                <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Sparkles className="size-4 text-primary" />
+                                            <span className="font-semibold text-xs text-foreground uppercase tracking-wider">
+                                                Customer Checkout Preview
+                                            </span>
+                                        </div>
+                                        <Badge variant="outline" className="text-[11px] bg-background">
+                                            {paymentForm.data.gateway_provider.toUpperCase()} Gateway
+                                        </Badge>
+                                    </div>
+
+                                    <div className="rounded-xl border border-primary/40 bg-background p-4 shadow-sm space-y-3">
+                                        <div className="flex items-center justify-between border-b pb-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="size-6 rounded-md bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                                                    <QrCode className="size-3.5" />
+                                                </div>
+                                                <span className="font-bold text-sm text-foreground">Pay Online (UPI / Card)</span>
+                                            </div>
+                                            <Badge className="bg-primary text-primary-foreground text-[10px]">
+                                                Pre-selected
+                                            </Badge>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                            <div className="p-3 rounded-lg border-2 border-emerald-500 bg-emerald-500/5 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Smartphone className="size-4 text-emerald-600" />
+                                                        <span className="font-bold text-xs text-emerald-950 dark:text-emerald-200">
+                                                            🟢 UPI (GPay / PhonePe / Paytm / QR)
+                                                        </span>
+                                                    </div>
+                                                    <Badge className="bg-emerald-600 text-white text-[9px] py-0 px-1 font-bold">
+                                                        Default Active
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-[11px] text-muted-foreground">
+                                                    UPI ID: <span className="font-mono text-foreground font-semibold">{paymentForm.data.upi_id || 'shop@upi'}</span>
+                                                </p>
+                                                <div className="flex gap-1">
+                                                    <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded font-bold">GPay</span>
+                                                    <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded font-bold">PhonePe</span>
+                                                    <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded font-bold">Paytm</span>
+                                                    <span className="text-[9px] bg-muted px-1.5 py-0.5 rounded font-bold">BHIM</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-3 rounded-lg border border-border bg-card/60 space-y-2 opacity-75">
+                                                <div className="flex items-center gap-1.5">
+                                                    <CreditCard className="size-4 text-muted-foreground" />
+                                                    <span className="font-semibold text-xs text-foreground">
+                                                        Debit / Credit Cards & NetBanking
+                                                    </span>
+                                                </div>
+                                                <p className="text-[11px] text-muted-foreground">
+                                                    Visa, MasterCard, RuPay, NetBanking & Wallets via {paymentForm.data.gateway_provider}.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                             <CardFooter className="flex justify-end border-t border-border pt-4">
-                                <Button type="submit" disabled={paymentForm.processing} className="min-w-32">
+                                <Button type="submit" disabled={paymentForm.processing} className="min-w-36 gap-2">
                                     {paymentForm.processing ? 'Saving...' : 'Save Payment Settings'}
                                 </Button>
                             </CardFooter>
