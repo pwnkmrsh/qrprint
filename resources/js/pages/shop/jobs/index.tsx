@@ -523,7 +523,7 @@ export default function JobHistory({
                 {/* Print Jobs Data Table */}
                 <Card className="border-border shadow-xs overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm border-collapse">
+                        <table className="w-full text-left text-sm border-collapse min-w-[900px]">
                             <thead>
                                 <tr className="border-b border-border bg-muted/50 font-semibold text-xs text-muted-foreground uppercase tracking-wider">
                                     <th className="p-3.5 w-10 text-center">

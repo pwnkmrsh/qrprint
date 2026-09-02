@@ -79,6 +79,9 @@ class GoogleAuthController extends Controller
                     if (Role::where('name', 'SHOP OWNER')->exists()) {
                         $user->assignRole('SHOP OWNER');
                     }
+                    if (Role::where('name', 'admin')->exists()) {
+                        $user->assignRole('admin');
+                    }
                 }
             } else {
                 // Update avatar if changed

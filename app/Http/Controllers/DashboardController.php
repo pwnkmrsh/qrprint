@@ -147,6 +147,57 @@ class DashboardController extends Controller
                 ];
             });
 
+        // 6.b Fetch completed counter payments for shop counter history
+        $completedPayments = PrintSession::with(['jobs.document'])
+            ->where('qr_print_id', $qrPrint->id)
+            ->where('payment_method', 'counter')
+            ->where('payment_status', 'paid')
+            ->latest()
+            ->take(15)
+            ->get()
+            ->map(function ($sess) {
+                return [
+                    'id' => $sess->id,
+                    'uuid' => $sess->uuid,
+                    'order_id' => $sess->formatted_order_id,
+                    'documents_count' => $sess->total_files,
+                    'pages_count' => $sess->total_pages,
+                    'amount' => (float)$sess->total_amount,
+                    'currency' => $sess->currency ?: '₹',
+                    'payment_status' => $sess->payment_status,
+                    'created_at' => $sess->created_at?->toDateTimeString(),
+                    'paid_at' => $sess->paid_at?->toDateTimeString(),
+                    'jobs' => $sess->jobs->map(function ($job) {
+                        return [
+                            'id' => $job->id,
+                            'document_name' => $job->document?->original_name ?? 'Unknown',
+                            'file_type' => $job->document?->file_type ?? 'other',
+                            'copies' => $job->copies,
+                            'orientation' => $job->orientation,
+                            'color_mode' => $job->color_mode,
+                            'paper_size' => $job->paper_size,
+                            'duplex' => $job->duplex,
+                            'amount' => (float)$job->amount,
+                        ];
+                    }),
+                ];
+            });
+
+        // Earnings and Wallet balance calculations
+        $totalEarnings = (float) PrintSession::where('qr_print_id', $qrPrint->id)
+            ->where('payment_status', 'paid')
+            ->sum('total_amount');
+
+        $walletBalance = (float) PrintSession::where('qr_print_id', $qrPrint->id)
+            ->where('payment_status', 'paid')
+            ->where('payment_method', 'online')
+            ->sum('total_amount');
+
+        $todayEarnings = (float) PrintSession::where('qr_print_id', $qrPrint->id)
+            ->where('payment_status', 'paid')
+            ->where('created_at', '>=', $todayStart)
+            ->sum('total_amount');
+
         // 7. Fetch partially failed print sessions for shop dashboard alerts
         $failedSessions = PrintSession::with(['jobs.document'])
             ->where('qr_print_id', $qrPrint->id)
@@ -200,6 +251,9 @@ class DashboardController extends Controller
                 'today_jobs' => $todayJobsCount,
                 'today_pages' => $todayPagesCount,
                 'total_completed' => $totalCompletedJobs,
+                'total_earnings' => $totalEarnings,
+                'wallet_balance' => $walletBalance,
+                'today_earnings' => $todayEarnings,
                 'pending' => $pendingCount,
                 'printing' => $printingCount,
                 'completed' => $completedCount,
@@ -208,6 +262,7 @@ class DashboardController extends Controller
             'jobs' => $jobs,
             'canManageStaff' => $canManageStaff,
             'pendingPayments' => $pendingPayments,
+            'completedPayments' => $completedPayments,
             'failedSessions' => $failedSessions,
         ]);
     }

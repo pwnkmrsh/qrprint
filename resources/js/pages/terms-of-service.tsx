@@ -210,7 +210,7 @@ export default function TermsOfService() {
                                 </h2>
                                 <div className="p-4 rounded-xl bg-card border border-border space-y-1.5 text-xs text-foreground">
                                     <div className="font-bold">QRPrintSetu Legal & Operations Team</div>
-                                    <div>Email: <a href="mailto:QRPrintSetuin@gmail.com" className="text-primary underline">QRPrintSetuin@gmail.com</a></div>
+                                    <div>Email: <a href="mailto:mynatech.in@gmail.com" className="text-primary underline">mynatech.in@gmail.com</a></div>
                                     <div>WhatsApp Help: <a href="https://wa.me/919098132966" target="_blank" rel="noopener noreferrer" className="text-primary underline">+91 90981 32966</a></div>
                                 </div>
                             </section>

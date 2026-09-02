@@ -92,8 +92,8 @@ export const CustomTable = ({ columns, actions, data, from, onDelete, onView, on
     };
 
     return (
-        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
-            <table className="w-full table-auto">
+        <div className="w-full overflow-x-auto rounded-lg border bg-white shadow-sm">
+            <table className="w-full min-w-[800px] table-auto">
                 <thead>
                     <tr className="bg-gray-700 text-white">
                         <th className="border p-4">#</th>

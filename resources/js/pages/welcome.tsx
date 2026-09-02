@@ -1361,7 +1361,7 @@ export default function Welcome() {
                                                 </div>
                                                 <div>
                                                     <div className="font-semibold">Email Support Desk</div>
-                                                    <div className="text-xs text-muted-foreground">QRPrintSetuin@gmail.com</div>
+                                                    <div className="text-xs text-muted-foreground">mynatech.in@gmail.com</div>
                                                 </div>
                                             </div>
 

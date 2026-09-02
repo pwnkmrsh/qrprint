@@ -204,7 +204,7 @@ export default function SecurityDeclaration() {
                                 For vulnerability disclosures, enterprise security audits, or compliance verifications, please reach out to our dedicated technical team:
                             </p>
                             <div className="flex flex-wrap items-center gap-6 text-xs text-foreground pt-1">
-                                <div>Email: <a href="mailto:QRPrintSetuin@gmail.com" className="text-primary underline">QRPrintSetuin@gmail.com</a></div>
+                                <div>Email: <a href="mailto:mynatech.in@gmail.com" className="text-primary underline">mynatech.in@gmail.com</a></div>
                                 <div>WhatsApp Support: <a href="https://wa.me/919098132966" target="_blank" rel="noopener noreferrer" className="text-primary underline">+91 90981 32966</a></div>
                             </div>
                         </div>

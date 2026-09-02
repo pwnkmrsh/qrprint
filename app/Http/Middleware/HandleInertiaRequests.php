@@ -46,6 +46,7 @@ class HandleInertiaRequests extends Middleware
                 'user'        => $request->user(),
                 'roles'       => fn() => $request->user()?->roles->pluck('name'),
                 'permissions' => fn() => $request->user()?->getAllPermissions()->pluck('name'),
+                'shop'        => fn() => $request->user() ? \App\Models\QrPrint::where('user_id', $request->user()->id)->first() : null,
             ],
             'ziggy' => fn(): array=> [
                  ...(new Ziggy)->toArray(),
@@ -75,6 +76,10 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error'   => $request->session()->get('error'),
+            ],
+            'system_settings' => fn() => [
+                'support_mobile' => \App\Models\SystemSetting::get('support_mobile', '9098132966'),
+                'support_email'  => \App\Models\SystemSetting::get('support_email', 'mynatech.in@gmail.com'),
             ],
         ];
     }

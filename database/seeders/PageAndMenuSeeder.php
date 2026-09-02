@@ -31,6 +31,15 @@ class PageAndMenuSeeder extends Seeder
             ['module' => 'Menus', 'name' => 'menu.create', 'label' => 'Create Menu Items', 'description' => 'Add new menu items'],
             ['module' => 'Menus', 'name' => 'menu.edit', 'label' => 'Edit Menu Items', 'description' => 'Edit and reorder menu items'],
             ['module' => 'Menus', 'name' => 'menu.delete', 'label' => 'Delete Menu Items', 'description' => 'Remove menu items'],
+
+            // Roles & Permissions module
+            ['module' => 'Roles', 'name' => 'access-roles-module', 'label' => 'Access Roles Module', 'description' => 'Access Roles Manager in admin panel'],
+            ['module' => 'Permissions', 'name' => 'access-permissions-module', 'label' => 'Access Permissions Module', 'description' => 'Access Permissions Manager in admin panel'],
+            ['module' => 'Users', 'name' => 'access-users-module', 'label' => 'Access Users Module', 'description' => 'Access Users/Staff Manager in admin panel'],
+
+            // Legacy modules
+            ['module' => 'Products', 'name' => 'access-products-module', 'label' => 'Access Products Module', 'description' => 'Access Products Manager'],
+            ['module' => 'Categories', 'name' => 'access-categories-module', 'label' => 'Access Categories Module', 'description' => 'Access Categories Manager'],
         ];
 
         foreach ($permissions as $p) {
@@ -45,21 +54,43 @@ class PageAndMenuSeeder extends Seeder
             );
         }
 
-        // Assign permissions to Super Admin and Admin roles
-        $superAdminRoles = Role::whereIn('name', ['super-admin', 'SUPER ADMIN', 'admin', 'SHOP OWNER'])->get();
-        $allPermNames = array_column($permissions, 'name');
+        // 2. Sync permissions for all system roles deterministically
+        // Super Admin gets all system permissions
+        $allPermissions = Permission::all();
+        $superAdminRoles = Role::whereIn('name', ['super-admin', 'SUPER ADMIN'])->get();
         foreach ($superAdminRoles as $role) {
-            $role->givePermissionTo($allPermNames);
+            $role->syncPermissions($allPermissions);
         }
 
-        // Assign editor permissions
-        $editorRoles = Role::whereIn('name', ['editor', 'SHOP MANAGER'])->get();
-        $editorPerms = [
-            'access-pages-module', 'page.view', 'page.create', 'page.edit', 'page.publish',
-            'access-menus-module', 'menu.view', 'menu.edit'
-        ];
-        foreach ($editorRoles as $role) {
-            $role->givePermissionTo($editorPerms);
+        // Shop Owner gets ONLY Printers and Shop Settings permissions
+        $shopOwnerPermissions = Permission::whereIn('module', ['Printers', 'Shop Settings'])->get();
+        $shopOwnerRoles = Role::whereIn('name', ['admin', 'SHOP OWNER'])->get();
+        foreach ($shopOwnerRoles as $role) {
+            $role->syncPermissions($shopOwnerPermissions);
+        }
+
+        // Shop Manager gets shop manager permissions (view printer, test printer, set default printer, view shop settings)
+        $shopManagerPermissions = Permission::whereIn('name', [
+            'printer.view', 'printer.settings', 'printer.test', 'printer.set_default',
+            'shop.settings.view'
+        ])->get();
+        $shopManagerRoles = Role::whereIn('name', ['editor', 'SHOP MANAGER'])->get();
+        foreach ($shopManagerRoles as $role) {
+            $role->syncPermissions($shopManagerPermissions);
+        }
+
+        // Printer Operator gets printer operator permissions (view and test printers)
+        $operatorPermissions = Permission::whereIn('name', ['printer.view', 'printer.test'])->get();
+        $operatorRoles = Role::whereIn('name', ['user', 'PRINTER OPERATOR'])->get();
+        foreach ($operatorRoles as $role) {
+            $role->syncPermissions($operatorPermissions);
+        }
+
+        // Viewer gets viewer permissions (view printer)
+        $viewerPermissions = Permission::whereIn('name', ['printer.view'])->get();
+        $viewerRoles = Role::whereIn('name', ['VIEWER'])->get();
+        foreach ($viewerRoles as $role) {
+            $role->syncPermissions($viewerPermissions);
         }
 
         $firstUser = User::first();
@@ -141,7 +172,7 @@ class PageAndMenuSeeder extends Seeder
                 'title' => 'Contact Us',
                 'slug' => 'contact',
                 'subtitle' => 'Get in Touch & Quick Onboarding Support',
-                'content' => '<h2>Direct Support Desk</h2><p>WhatsApp: +91 90981 32966 (9 AM – 9 PM IST)<br>Email: QRPrintSetuin@gmail.com</p>',
+                'content' => '<h2>Direct Support Desk</h2><p>WhatsApp: +91 90981 32966 (9 AM – 9 PM IST)<br>Email: mynatech.in@gmail.com</p>',
                 'template' => 'landing_section',
                 'status' => 'published',
                 'published_at' => now(),

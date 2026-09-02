@@ -239,7 +239,7 @@ export default function PagesIndex({ pages, filters, stats, filteredCount }: Ind
                 {/* Pages Data Table */}
                 <Card className="border-border bg-card shadow-xs overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
+                        <table className="w-full text-left text-sm min-w-[800px]">
                             <thead className="bg-muted/50 border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
                                 <tr>
                                     <th className="px-5 py-3.5 font-bold">Page Title & Slug</th>

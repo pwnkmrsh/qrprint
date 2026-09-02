@@ -107,6 +107,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('roles', RoleController::class)->middleware('permission:access-roles-module');
     Route::resource('users', UserController::class)->middleware('permission:access-users-module');
 
+    // System Settings for Super Admin
+    Route::get('admin/settings', [\App\Http\Controllers\SystemSettingController::class, 'edit'])->name('admin.settings.edit');
+    Route::post('admin/settings', [\App\Http\Controllers\SystemSettingController::class, 'update'])->name('admin.settings.update');
+
     // CMS Pages Management
     Route::post('pages/{page}/toggle-status', [PageController::class, 'toggleStatus'])
         ->name('pages.toggle-status')

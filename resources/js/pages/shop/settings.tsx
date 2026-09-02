@@ -1019,39 +1019,70 @@ export default function ShopSettings({
                         </CardHeader>
                         <form onSubmit={handlePaymentSubmit}>
                             <CardContent className="space-y-6">
-                                {/* Toggles Group */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="p-4 rounded-xl border border-border/80 bg-background shadow-xs flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <Label className="text-sm font-semibold">Online Payment</Label>
-                                            <p className="text-xs text-muted-foreground">UPI, QR & Card gateway</p>
+                                {/* Payment Mode & Currency Display Row */}
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    {/* Payment Mode Selector */}
+                                    <div className="lg:col-span-2 space-y-3">
+                                        <Label className="text-sm font-semibold">Payment Mode</Label>
+                                        <p className="text-xs text-muted-foreground">Configure how you'll take money from customers — counter, online or both.</p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            {[
+                                                { id: 'both', label: '💳 Online + Counter', desc: 'The customer gets both options' },
+                                                { id: 'online', label: '🌐 Online Only', desc: 'Online payment only, no counter' },
+                                                { id: 'counter', label: '💵 Counter Only', desc: 'Cash at the counter only' },
+                                            ].map((mode) => {
+                                                const isSelected = (mode.id === 'both' && paymentForm.data.online_payment_enabled && paymentForm.data.counter_payment_enabled) ||
+                                                                   (mode.id === 'online' && paymentForm.data.online_payment_enabled && !paymentForm.data.counter_payment_enabled) ||
+                                                                   (mode.id === 'counter' && !paymentForm.data.online_payment_enabled && paymentForm.data.counter_payment_enabled);
+                                                
+                                                const selectMode = () => {
+                                                    paymentForm.setData({
+                                                        ...paymentForm.data,
+                                                        online_payment_enabled: mode.id === 'both' || mode.id === 'online',
+                                                        counter_payment_enabled: mode.id === 'both' || mode.id === 'counter'
+                                                    });
+                                                };
+
+                                                return (
+                                                    <button
+                                                        key={mode.id}
+                                                        type="button"
+                                                        onClick={selectMode}
+                                                        className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between h-full ${
+                                                            isSelected
+                                                                ? 'border-primary bg-primary/[0.02] shadow-xs text-foreground ring-1 ring-primary/40 font-semibold'
+                                                                : 'border-border bg-background text-muted-foreground hover:border-border/80'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center justify-between w-full mb-1">
+                                                            <span className="font-semibold text-sm text-foreground">{mode.label}</span>
+                                                            {isSelected ? (
+                                                                <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                                                            ) : (
+                                                                <div className="size-4 rounded-full border border-muted-foreground/40 shrink-0" />
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[11px] text-muted-foreground mt-1 leading-tight">{mode.desc}</p>
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
-                                        <Switch
-                                            checked={paymentForm.data.online_payment_enabled}
-                                            onCheckedChange={(c) => paymentForm.setData('online_payment_enabled', c)}
-                                        />
                                     </div>
 
-                                    <div className="p-4 rounded-xl border border-border/80 bg-background shadow-xs flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <Label className="text-sm font-semibold">Counter Payment</Label>
-                                            <p className="text-xs text-muted-foreground">Pay cash at desk</p>
+                                    {/* Currency Display Selector */}
+                                    <div className="space-y-3">
+                                        <Label className="text-sm font-semibold">Currency Settings</Label>
+                                        <p className="text-xs text-muted-foreground font-normal">Toggle how pricing is formatted.</p>
+                                        <div className="p-4 rounded-xl border border-border/80 bg-background shadow-xs flex items-center justify-between h-[calc(100%-2.5rem)]">
+                                            <div className="space-y-0.5">
+                                                <Label className="text-sm font-semibold">Currency Display</Label>
+                                                <p className="text-xs text-muted-foreground">Show {paymentForm.data.currency_symbol} symbol in UI</p>
+                                            </div>
+                                            <Switch
+                                                checked={paymentForm.data.show_currency}
+                                                onCheckedChange={(c) => paymentForm.setData('show_currency', c)}
+                                            />
                                         </div>
-                                        <Switch
-                                            checked={paymentForm.data.counter_payment_enabled}
-                                            onCheckedChange={(c) => paymentForm.setData('counter_payment_enabled', c)}
-                                        />
-                                    </div>
-
-                                    <div className="p-4 rounded-xl border border-border/80 bg-background shadow-xs flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <Label className="text-sm font-semibold">Currency Display</Label>
-                                            <p className="text-xs text-muted-foreground">Show {paymentForm.data.currency_symbol} symbol in UI</p>
-                                        </div>
-                                        <Switch
-                                            checked={paymentForm.data.show_currency}
-                                            onCheckedChange={(c) => paymentForm.setData('show_currency', c)}
-                                        />
                                     </div>
                                 </div>
 

@@ -30,7 +30,15 @@ class QrPrintController extends Controller
      */
     public function index()
     {
-        $prints = QrPrint::latest()->get()->map(fn(QrPrint $qrPrint) => [
+        $user = auth()->user();
+        $query = QrPrint::query();
+
+        // If not a super admin, restrict to their own QR prints
+        if (!$user->hasRole('super-admin') && !$user->hasRole('SUPER ADMIN')) {
+            $query->where('user_id', $user->id);
+        }
+
+        $prints = $query->latest()->get()->map(fn(QrPrint $qrPrint) => [
             'id' => $qrPrint->id,
             'title' => $qrPrint->title,
             'print_count' => $qrPrint->print_count,
@@ -54,6 +62,7 @@ class QrPrintController extends Controller
         ]);
 
         $qrPrint = QrPrint::create([
+            'user_id' => auth()->id(),
             'uuid' => (string) Str::uuid(),
             'title' => $validated['title'],
             'content' => $validated['content'] ?? '',
@@ -71,7 +80,10 @@ class QrPrintController extends Controller
     public function qr(QrPrint $qrPrint)
     {
         // Allowed even if inactive, so merchant can print/download QR poster from dashboard
-
+        $user = auth()->user();
+        if ($qrPrint->user_id !== $user->id && !$user->hasRole('super-admin') && !$user->hasRole('SUPER ADMIN')) {
+            abort(403, 'Unauthorized access to this QR code.');
+        }
 
         $url = route('qr-print.print', [
             'token' => $qrPrint->print_token,
