@@ -108,8 +108,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('users', UserController::class)->middleware('permission:access-users-module');
 
     // System Settings for Super Admin
-    Route::get('admin/settings', [\App\Http\Controllers\SystemSettingController::class, 'edit'])->name('admin.settings.edit');
-    Route::post('admin/settings', [\App\Http\Controllers\SystemSettingController::class, 'update'])->name('admin.settings.update');
+    Route::get('admin/settings', [\App\Http\Controllers\SystemSettingController::class, 'edit'])
+        ->name('admin.settings.edit')
+        ->middleware('role:super-admin|SUPER ADMIN');
+    Route::post('admin/settings', [\App\Http\Controllers\SystemSettingController::class, 'update'])
+        ->name('admin.settings.update')
+        ->middleware('role:super-admin|SUPER ADMIN');
 
     // CMS Pages Management
     Route::post('pages/{page}/toggle-status', [PageController::class, 'toggleStatus'])
@@ -146,7 +150,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // -------------------------------------------------------------
     // Super Admin: Settings, Shops, Customers, Orders, Payments Hub
     // -------------------------------------------------------------
-    Route::prefix('admin')->name('admin.')->group(function () {
+    Route::prefix('admin')->name('admin.')->middleware(['role:super-admin|SUPER ADMIN'])->group(function () {
         // Settings (General, Cashfree, Print)
         Route::get('settings', [AdminSettingController::class, 'index'])->name('settings.index');
         Route::post('settings/general', [AdminSettingController::class, 'updateGeneral'])->name('settings.general');

@@ -19,7 +19,9 @@ import {
     Settings, 
     CreditCard, 
     ShoppingBag, 
-    Cpu 
+    Cpu,
+    LifeBuoy,
+    Copy
 } from 'lucide-react';
 import AppLogo from './app-logo';
 import { useState } from 'react';

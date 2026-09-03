@@ -11,13 +11,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('system_settings', function (Blueprint $table) {
-            $table->id();
-            $table->string('key')->unique();
-            $table->json('value')->nullable();
-            $table->string('group')->default('general')->index();
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('system_settings')) {
+            Schema::create('system_settings', function (Blueprint $table) {
+                $table->id();
+                $table->string('key')->unique();
+                $table->json('value')->nullable();
+                $table->string('group')->default('general')->index();
+                $table->timestamps();
+            });
+        } else {
+            Schema::table('system_settings', function (Blueprint $table) {
+                if (!Schema::hasColumn('system_settings', 'group')) {
+                    $table->string('group')->default('general')->index();
+                }
+            });
+        }
     }
 
     /**

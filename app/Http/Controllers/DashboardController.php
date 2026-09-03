@@ -67,13 +67,13 @@ class DashboardController extends Controller
 
         // 3. Today's print statistics
         $todayStart = Carbon::today();
-        
+
         // Today's completed jobs
         $todayJobs = PrintJob::whereHas('document', function ($q) use ($qrPrint) {
             $q->where('qr_print_id', $qrPrint->id);
         })
-        ->where('status', 'printed')
-        ->where('printed_at', '>=', $todayStart);
+            ->where('status', 'printed')
+            ->where('printed_at', '>=', $todayStart);
 
         $todayJobsCount = $todayJobs->count();
         $todayPagesCount = (int) $todayJobs->sum('copies');
@@ -82,8 +82,8 @@ class DashboardController extends Controller
         $totalCompletedJobs = PrintJob::whereHas('document', function ($q) use ($qrPrint) {
             $q->where('qr_print_id', $qrPrint->id);
         })
-        ->where('status', 'printed')
-        ->count();
+            ->where('status', 'printed')
+            ->count();
 
         // Job status counts for the merchant
         $pendingCount = PrintJob::whereHas('document', function ($q) use ($qrPrint) {
@@ -203,7 +203,7 @@ class DashboardController extends Controller
             ->where('qr_print_id', $qrPrint->id)
             ->where(function ($q) {
                 $q->where('status', 'partial_failed')
-                  ->orWhere('print_status', 'partial_failed');
+                    ->orWhere('print_status', 'partial_failed');
             })
             ->latest()
             ->get()
@@ -299,7 +299,7 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         $qrPrint = QrPrint::where('user_id', $user->id)->firstOrFail();
-        
+
         $qrPrint->update([
             'is_active' => !$qrPrint->is_active
         ]);
@@ -334,7 +334,7 @@ class DashboardController extends Controller
     public function retryJob(Request $request, PrintJob $job)
     {
         $user = Auth::user();
-        
+
         // Ensure this job belongs to the current user's shop
         abort_unless($job->document && $job->document->qrPrint->user_id === $user->id, 403);
 

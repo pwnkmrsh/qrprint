@@ -148,11 +148,6 @@ class AuthorizationRestrictionTest extends TestCase
 
     public function test_super_admin_can_access_and_update_system_settings_while_shop_owner_is_denied(): void
     {
-        $this->withoutExceptionHandling();
-        $routes = collect(\Route::getRoutes())->map(function ($route) {
-            return $route->uri();
-        })->toArray();
-        dd($routes);
         $superAdmin = User::where('email', 'pwnkmrsh@gmail.com')->first();
         $shopOwner = User::where('email', 'owner@example.com')->first();
 

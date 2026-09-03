@@ -14,8 +14,8 @@ class SystemSettingController extends Controller
      */
     public function edit()
     {
-        // Authorize super-admin or admin role
-        if (!Auth::user() || !Auth::user()->hasAnyRole(['super-admin', 'SUPER ADMIN', 'admin'])) {
+        // Authorize super-admin role
+        if (!Auth::user() || !Auth::user()->hasAnyRole(['super-admin', 'SUPER ADMIN'])) {
             abort(403, 'Unauthorized access.');
         }
 
@@ -32,8 +32,8 @@ class SystemSettingController extends Controller
      */
     public function update(Request $request)
     {
-        // Authorize super-admin or admin role
-        if (!Auth::user() || !Auth::user()->hasAnyRole(['super-admin', 'SUPER ADMIN', 'admin'])) {
+        // Authorize super-admin role
+        if (!Auth::user() || !Auth::user()->hasAnyRole(['super-admin', 'SUPER ADMIN'])) {
             abort(403, 'Unauthorized access.');
         }
 
