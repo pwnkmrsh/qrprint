@@ -68,4 +68,19 @@ class QrPrint extends Model
     {
         return $this->hasManyThrough(PrintJob::class, PrintSession::class, 'qr_print_id', 'print_session_id');
     }
+
+    /**
+     * Get the public print URL for customer QR scanning.
+     * Dynamically resolved from SystemSetting or config('app.url') / url('/').
+     */
+    public function getPublicPrintUrlAttribute(): string
+    {
+        $baseUrl = SystemSetting::get('app_url') ?: config('app.url');
+        if (empty($baseUrl)) {
+            $baseUrl = url('/');
+        }
+
+        $baseUrl = rtrim($baseUrl, '/');
+        return "{$baseUrl}/print/{$this->print_token}";
+    }
 }

@@ -66,7 +66,7 @@ class AdminShopController extends Controller
                 'sessions_count' => $shop->sessions_count,
                 'created_at' => $shop->created_at?->toDateTimeString(),
                 'qr_url' => route('qr-print.qr', $shop),
-                'print_url' => route('qr-print.print', $shop->print_token),
+                'print_url' => $shop->public_print_url,
                 'details_url' => route('admin.shops.show', $shop->id),
             ]),
             'filters' => [
@@ -121,7 +121,7 @@ class AdminShopController extends Controller
                 'print_count' => $shop->print_count,
                 'created_at' => $shop->created_at?->toDateTimeString(),
                 'qr_url' => route('qr-print.qr', $shop),
-                'print_url' => route('qr-print.print', $shop->print_token),
+                'print_url' => $shop->public_print_url,
                 'owner' => [
                     'id' => $shop->user?->id,
                     'name' => $shop->user?->name ?? 'Unassigned',

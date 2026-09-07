@@ -236,7 +236,7 @@ class DashboardController extends Controller
                 'is_active' => $qrPrint->is_active,
                 'print_token' => $qrPrint->print_token,
                 'qr_url' => route('qr-print.qr', $qrPrint),
-                'print_url' => route('qr-print.print', $qrPrint->print_token),
+                'print_url' => $qrPrint->public_print_url,
             ],
             'printer' => [
                 'state' => $printerState,
@@ -411,6 +411,7 @@ class DashboardController extends Controller
             'shopName' => $qrPrint->title,
             'qrUrl' => route('qr-print.qr', $qrPrint),
             'printToken' => $qrPrint->print_token,
+            'printUrl' => $qrPrint->public_print_url,
         ]);
     }
 }

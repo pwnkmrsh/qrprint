@@ -249,7 +249,7 @@ class CashfreePaymentController extends Controller
                 'is_paid' => false,
                 'payment_status' => $session->payment_status,
                 'order_status' => $statusCheck['order_status'] ?? 'ACTIVE',
-                'message' => 'Payment is awaiting gateway completion.',
+                'message' => 'Payment is awaiting completion. If you just paid, please wait a few seconds while your bank confirms the transaction.',
             ]);
         }
 
@@ -257,7 +257,7 @@ class CashfreePaymentController extends Controller
             'success' => true,
             'is_paid' => false,
             'payment_status' => $session->payment_status,
-            'message' => 'No gateway transaction found.',
+            'message' => 'No online payment initiated yet. Click "Pay Online" below to pay via Google Pay, PhonePe, Paytm, UPI, Cards, or NetBanking.',
         ]);
     }
 

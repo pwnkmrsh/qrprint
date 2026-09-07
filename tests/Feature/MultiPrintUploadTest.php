@@ -161,3 +161,19 @@ test('upload-multi auto heals missing qr print uuid', function () {
     $qrPrint->refresh();
     expect($qrPrint->uuid)->not->toBeEmpty();
 });
+
+test('qr code generation embeds live production domain rather than local ip', function () {
+    $owner = User::factory()->create();
+    $qrPrint = QrPrint::create([
+        'user_id' => $owner->id,
+        'title' => 'Live Cafe',
+        'print_token' => 'live-shop-token-999',
+        'is_active' => true,
+    ]);
+
+    expect($qrPrint->public_print_url)->toBe(rtrim(config('app.url'), '/') . '/print/live-shop-token-999');
+
+    $response = $this->actingAs($owner)->get(route('qr-print.qr', $qrPrint));
+    $response->assertOk();
+    $response->assertHeader('Content-Type', 'image/svg+xml');
+});

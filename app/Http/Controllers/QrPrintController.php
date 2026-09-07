@@ -45,7 +45,7 @@ class QrPrintController extends Controller
             'is_active' => $qrPrint->is_active,
             'created_at' => $qrPrint->created_at?->toDateTimeString(),
             'qr_url' => route('qr-print.qr', $qrPrint),
-            'print_url' => route('qr-print.print', $qrPrint->print_token),
+            'print_url' => $qrPrint->public_print_url,
         ]);
 
         return Inertia::render('qr-print/index', compact('prints'));
@@ -85,9 +85,7 @@ class QrPrintController extends Controller
             abort(403, 'Unauthorized access to this QR code.');
         }
 
-        $url = route('qr-print.print', [
-            'token' => $qrPrint->print_token,
-        ]);
+        $url = $qrPrint->public_print_url;
 
         $builder = new Builder(
             writer: new SvgWriter(),

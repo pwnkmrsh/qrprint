@@ -6,9 +6,10 @@ interface PosterProps {
     shopName: string;
     qrUrl: string;
     printToken: string;
+    printUrl?: string;
 }
 
-export default function Poster({ shopName, qrUrl, printToken }: PosterProps) {
+export default function Poster({ shopName, qrUrl, printToken, printUrl }: PosterProps) {
     useEffect(() => {
         // Trigger window print after content loads
         const timer = setTimeout(() => {
@@ -16,6 +17,8 @@ export default function Poster({ shopName, qrUrl, printToken }: PosterProps) {
         }, 1000);
         return () => clearTimeout(timer);
     }, []);
+
+    const displayUrl = printUrl || (typeof window !== 'undefined' ? `${window.location.origin}/print/${printToken}` : `/print/${printToken}`);
 
     return (
         <div className="min-h-screen bg-white text-slate-900 flex flex-col items-center justify-between p-8 sm:p-12 font-sans relative overflow-hidden select-none print:p-0 print:m-0 print:bg-white print:text-black">
@@ -58,11 +61,11 @@ export default function Poster({ shopName, qrUrl, printToken }: PosterProps) {
                         </div>
                     </div>
 
-                    <div className="text-center">
-                        <span className="text-sm font-semibold tracking-wider text-slate-500 uppercase">Shop Code</span>
-                        <h2 className="text-2xl font-black text-slate-950 tracking-widest font-mono">
-                            {printToken}
-                        </h2>
+                    <div className="text-center space-y-1">
+                        <span className="text-xs font-semibold tracking-wider text-slate-500 uppercase">Direct Link or Scan</span>
+                        <div className="text-xs font-mono font-bold text-primary print:text-black select-all">
+                            {displayUrl}
+                        </div>
                     </div>
                 </div>
 

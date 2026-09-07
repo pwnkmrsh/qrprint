@@ -146,7 +146,6 @@ class CashfreePaymentService
             'order_meta' => [
                 'return_url' => $resolvedReturnUrl,
                 'notify_url' => $resolvedNotifyUrl,
-                'payment_methods' => 'upi,cc,dc,nb,wallet',
             ],
             'order_note' => "Print Order {$session->formatted_order_id} ({$session->total_files} files)",
             'order_tags' => [
