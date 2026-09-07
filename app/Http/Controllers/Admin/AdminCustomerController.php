@@ -18,7 +18,14 @@ class AdminCustomerController extends Controller
         $search = $request->input('search');
 
         $customers = User::with(['roles'])
-            ->withCount(['printJobs'])
+            ->select('users.*')
+            ->selectSub(function ($query) {
+                $query->selectRaw('coalesce(count(print_jobs.id), 0)')
+                    ->from('print_jobs')
+                    ->join('print_sessions', 'print_sessions.id', '=', 'print_jobs.print_session_id')
+                    ->join('qr_prints', 'qr_prints.id', '=', 'print_sessions.qr_print_id')
+                    ->whereColumn('qr_prints.user_id', 'users.id');
+            }, 'print_jobs_count')
             ->when($search, function ($query, $search) {
                 $query->where('name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");

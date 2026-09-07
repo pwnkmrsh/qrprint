@@ -112,12 +112,26 @@ class CashfreePaymentService
         $qrPrint = $session->qrPrint;
         $token = $qrPrint ? $qrPrint->print_token : 'print';
 
-        $resolvedReturnUrl = $returnUrl ?: route('qr-print.cashfree.return', [
-            'token' => $token,
-            'session' => $session->uuid,
-        ]) . '?order_id={order_id}';
+        if (empty($returnUrl)) {
+            $routeUrl = route('qr-print.cashfree.return', [
+                'token' => $token,
+                'session' => $session->uuid,
+            ]);
+            $separator = str_contains($routeUrl, '?') ? '&' : '?';
+            $resolvedReturnUrl = $routeUrl . $separator . 'order_id={order_id}';
+        } else {
+            $resolvedReturnUrl = $returnUrl;
+        }
+
+        // Cashfree API strictly enforces that return_url and notify_url MUST start with https://
+        if (str_starts_with(strtolower($resolvedReturnUrl), 'http://')) {
+            $resolvedReturnUrl = 'https://' . substr($resolvedReturnUrl, 7);
+        }
 
         $resolvedNotifyUrl = $notifyUrl ?: route('payment.cashfree.webhook');
+        if (str_starts_with(strtolower($resolvedNotifyUrl), 'http://')) {
+            $resolvedNotifyUrl = 'https://' . substr($resolvedNotifyUrl, 7);
+        }
 
         $payload = [
             'order_id' => $orderId,

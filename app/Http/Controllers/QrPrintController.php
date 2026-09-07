@@ -377,18 +377,17 @@ class QrPrintController extends Controller
 
         $paymentMethod = $validated['payment_method'] ?? 'online';
         $isOnline = in_array($paymentMethod, ['online', 'upi', 'card', 'wallet']);
-        $paymentStatus = $isOnline ? 'paid' : 'pending';
-        $printStatus = $isOnline ? 'ready_to_print' : 'pending_payment';
 
+        // Initialize session with pending payment state
         $session = PrintSession::create([
             'qr_print_id' => $qrPrint->id,
             'total_files' => count($validated['files']),
             'completed_files' => 0,
             'failed_files' => 0,
-            'status' => 'ready',
+            'status' => 'pending_payment',
             'payment_method' => $paymentMethod,
-            'payment_status' => $paymentStatus,
-            'print_status' => $printStatus,
+            'payment_status' => 'pending',
+            'print_status' => 'pending_payment',
             'total_amount' => 0.00,
             'currency' => $currency,
         ]);
@@ -486,36 +485,43 @@ class QrPrintController extends Controller
                 'print_options' => $fileConfig['print_options'] ?? null,
                 'payment_method' => $paymentMethod,
                 'amount' => $jobAmount,
-                'status' => $isOnline ? 'pending' : 'pending_payment',
+                'status' => 'pending_payment',
                 'attempts' => 0,
             ]);
-
-            $doc->increment('print_count');
-            $doc->update(['last_printed_at' => now()]);
         }
 
-        // Update session total amount
-        $session->update(['total_amount' => $totalSessionAmount]);
+        // Handle free orders vs paid orders
+        $isFree = $totalSessionAmount <= 0;
+        if ($isFree) {
+            $session->update([
+                'total_amount' => 0.00,
+                'payment_status' => 'paid',
+                'print_status' => 'ready_to_print',
+                'status' => 'ready',
+                'paid_at' => now(),
+            ]);
 
-        if ($isOnline) {
-            app(\App\Services\PaymentManagerService::class)->recordOnlineSuccess(
-                $session,
-                [
-                    'payment_method' => $paymentMethod,
-                    'amount' => $totalSessionAmount,
-                    'order_id' => $session->formatted_order_id,
-                ],
-                $setting?->gateway_provider ?: 'direct_upi'
-            );
+            PrintJob::where('print_session_id', $session->id)->update([
+                'status' => 'pending',
+            ]);
+
+            $qrPrint->increment('print_count');
+            $qrPrint->update(['last_printed_at' => now()]);
+        } else {
+            $session->update([
+                'total_amount' => $totalSessionAmount,
+                'payment_status' => 'pending',
+                'print_status' => 'pending_payment',
+                'status' => 'pending_payment',
+            ]);
         }
-
-        $qrPrint->increment('print_count');
-        $qrPrint->update(['last_printed_at' => now()]);
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
                 'session_uuid' => $session->uuid,
+                'total_amount' => $totalSessionAmount,
+                'payment_status' => $session->payment_status,
                 'status_url' => route('qr-print.session.status', [
                     'token' => $token,
                     'session' => $session->uuid,
@@ -550,6 +556,8 @@ class QrPrintController extends Controller
                 'logo_url' => $setting?->logo_url,
                 'mobile_number' => $setting?->mobile_number,
                 'address' => $setting?->address,
+                'upi_id' => $setting?->upi_id ?? ($setting?->mobile_number ? preg_replace('/[^0-9]/', '', $setting->mobile_number) . '@upi' : 'merchant@upi'),
+                'merchant_name' => $setting?->merchant_name ?? ($setting?->shop_name ?: $qrPrint->title),
             ],
             'session' => [
                 'uuid' => $session->uuid,
@@ -557,7 +565,7 @@ class QrPrintController extends Controller
                 'status' => $session->status,
                 'payment_method' => $session->payment_method ?: 'counter',
                 'payment_status' => $session->payment_status ?: 'pending',
-                'print_status' => $session->print_status ?: 'ready_to_print',
+                'print_status' => $session->print_status ?: ($session->payment_status === 'paid' ? 'ready_to_print' : 'pending_payment'),
                 'total_amount' => (float)$session->total_amount,
                 'currency' => $session->currency ?: ($setting?->currency_symbol ?: '₹'),
                 'total_files' => $session->total_files,
@@ -590,6 +598,8 @@ class QrPrintController extends Controller
                 'session' => $session->uuid,
             ]),
             'retry_url' => route('qr-print.job.retry', $token),
+            'verify_payment_url' => route('qr-print.cashfree.verify', $token),
+            'create_order_url' => route('qr-print.cashfree.create-order', $token),
         ]);
     }
 
@@ -613,7 +623,7 @@ class QrPrintController extends Controller
                 'status' => $session->status,
                 'payment_method' => $session->payment_method ?: 'counter',
                 'payment_status' => $session->payment_status ?: 'pending',
-                'print_status' => $session->print_status ?: 'ready_to_print',
+                'print_status' => $session->print_status ?: ($session->payment_status === 'paid' ? 'ready_to_print' : 'pending_payment'),
                 'total_amount' => (float)$session->total_amount,
                 'currency' => $session->currency ?: '₹',
                 'total_files' => $session->total_files,

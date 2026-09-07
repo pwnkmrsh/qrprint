@@ -1161,22 +1161,22 @@ export default function ShopSettings({
                                     </div>
                                 </div>
 
-                                {/* Section 2: UPI Configuration & Default Online Mode */}
+                                {/* Section 2: Online Payment & Merchant Details */}
                                 <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-4">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <QrCode className="w-5 h-5 text-primary" />
-                                            <h4 className="font-semibold text-sm text-foreground">Pay Online: Default Mode & UPI Configuration</h4>
+                                            <CreditCard className="w-5 h-5 text-primary" />
+                                            <h4 className="font-semibold text-sm text-foreground">Online Payment & Merchant Information</h4>
                                         </div>
                                         <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-xs">
-                                            Default: UPI Selected
+                                            Gateway Active
                                         </Badge>
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <Label htmlFor="upi_id" className="text-xs font-semibold">
-                                                Shop UPI ID / VPA <span className="text-rose-500">*</span>
+                                                Shop UPI ID / VPA
                                             </Label>
                                             <Input
                                                 id="upi_id"
@@ -1186,13 +1186,13 @@ export default function ShopSettings({
                                                 className="bg-background text-sm font-mono"
                                             />
                                             <p className="text-[11px] text-muted-foreground">
-                                                Used to generate dynamic UPI QR code on customer checkout (GPay, PhonePe, Paytm, BHIM).
+                                                Optional shop VPA identifier for direct settlement records.
                                             </p>
                                         </div>
 
                                         <div className="space-y-1.5">
                                             <Label htmlFor="merchant_name" className="text-xs font-semibold">
-                                                UPI Merchant Display Name
+                                                Merchant Display Name
                                             </Label>
                                             <Input
                                                 id="merchant_name"
@@ -1202,71 +1202,8 @@ export default function ShopSettings({
                                                 className="bg-background text-sm"
                                             />
                                             <p className="text-[11px] text-muted-foreground">
-                                                Name shown to customers inside Google Pay / PhonePe when scanning the QR code.
+                                                Business name displayed on customer receipts and checkout.
                                             </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Default Online Mode Sub-selector */}
-                                    <div className="pt-2 border-t border-primary/10">
-                                        <Label className="text-xs font-semibold block mb-2">Default Online Payment Sub-option</Label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <label
-                                                onClick={() => paymentForm.setData('default_online_submode', 'upi')}
-                                                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                                                    paymentForm.data.default_online_submode === 'upi'
-                                                        ? 'bg-background border-primary ring-1 ring-primary text-foreground shadow-xs'
-                                                        : 'bg-background/60 border-border text-muted-foreground hover:bg-background'
-                                                }`}
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="default_online_submode"
-                                                    value="upi"
-                                                    checked={paymentForm.data.default_online_submode === 'upi'}
-                                                    onChange={() => paymentForm.setData('default_online_submode', 'upi')}
-                                                    className="sr-only"
-                                                />
-                                                <div className="size-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
-                                                    <Smartphone className="size-4" />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-xs text-foreground">UPI (GPay / PhonePe / Paytm / QR)</span>
-                                                        <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold py-0">
-                                                            Recommended
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-[11px] text-muted-foreground">Pre-selects instant UPI QR code & app intent links for customers.</p>
-                                                </div>
-                                            </label>
-
-                                            <label
-                                                onClick={() => paymentForm.setData('default_online_submode', 'card')}
-                                                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                                                    paymentForm.data.default_online_submode === 'card'
-                                                        ? 'bg-background border-primary ring-1 ring-primary text-foreground shadow-xs'
-                                                        : 'bg-background/60 border-border text-muted-foreground hover:bg-background'
-                                                }`}
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="default_online_submode"
-                                                    value="card"
-                                                    checked={paymentForm.data.default_online_submode === 'card'}
-                                                    onChange={() => paymentForm.setData('default_online_submode', 'card')}
-                                                    className="sr-only"
-                                                />
-                                                <div className="size-8 rounded-md bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
-                                                    <CreditCard className="size-4" />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-xs text-foreground">Debit / Credit Card / NetBanking</span>
-                                                    </div>
-                                                    <p className="text-[11px] text-muted-foreground">Pre-selects card & netbanking gateway checkout.</p>
-                                                </div>
-                                            </label>
                                         </div>
                                     </div>
                                 </div>

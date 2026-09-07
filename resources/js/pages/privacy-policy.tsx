@@ -16,7 +16,10 @@ import {
     Mail,
     Smartphone,
     EyeOff,
-    ExternalLink
+    ExternalLink,
+    CreditCard,
+    Building2,
+    RotateCcw
 } from 'lucide-react';
 
 export default function PrivacyPolicy() {
@@ -24,7 +27,7 @@ export default function PrivacyPolicy() {
 
     return (
         <>
-            <Head title="Privacy Policy — QRPrintSetu">
+            <Head title="Privacy Policy — Print Setu | Zero-Retention Guarantee">
                 <link rel="preconnect" href="https://fonts.bunny.net" />
                 <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700" rel="stylesheet" />
             </Head>
@@ -35,23 +38,25 @@ export default function PrivacyPolicy() {
                 <main className="grow pt-28 pb-20 md:pt-36">
                     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
                         {/* Breadcrumbs & Navigation */}
-                        <div className="flex items-center justify-between gap-4 mb-8">
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
                             <Button asChild variant="outline" size="sm" className="gap-2 text-xs border-border bg-card hover:bg-muted">
                                 <Link href="/">
                                     <ArrowLeft className="h-3.5 w-3.5" />
                                     <span>Back to Home</span>
                                 </Link>
                             </Button>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <Button asChild variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
-                                    <Link href="/terms-of-service">
-                                        Terms of Service
-                                    </Link>
+                                    <Link href="/terms-and-conditions">Terms & Conditions</Link>
+                                </Button>
+                                <Button asChild variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
+                                    <Link href="/refund-policy">Refund Policy</Link>
+                                </Button>
+                                <Button asChild variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground">
+                                    <Link href="/pricing">Pricing in INR</Link>
                                 </Button>
                                 <Button asChild variant="ghost" size="sm" className="text-xs text-primary font-semibold hover:bg-primary/10">
-                                    <Link href="/security-declaration">
-                                        Security Declaration
-                                    </Link>
+                                    <Link href="/contact-us">Contact Us</Link>
                                 </Button>
                             </div>
                         </div>
@@ -68,10 +73,10 @@ export default function PrivacyPolicy() {
                             <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1.5">
                                     <Clock className="h-3.5 w-3.5 text-primary" />
-                                    Last Updated: August 24, 2026
+                                    Last Updated: August 2026
                                 </span>
                                 <span>•</span>
-                                <span>Version 2.4</span>
+                                <span>Version 2.5</span>
                                 <span>•</span>
                                 <span className="text-primary font-semibold">Strict Zero-Retention Guarantee</span>
                             </div>
@@ -119,7 +124,7 @@ export default function PrivacyPolicy() {
                                     Introduction & Core Philosophy
                                 </h2>
                                 <p>
-                                    Welcome to QRPrintSetu ("we", "our", "us", or "QRPrintSetu"). We operate a cloud-assisted QR print automation platform built specifically for cyber cafes, campus Xerox counters, book depots, and stationery centers across India.
+                                    Welcome to <strong>Print Setu</strong> (operated by <strong>MynaTech Innovations</strong>, Sector 62, Noida, Uttar Pradesh 201309, India). We operate a cloud-assisted QR print automation platform built specifically for cyber cafes, campus Xerox counters, book depots, and stationery centers across India.
                                 </p>
                                 <p>
                                     Our fundamental architecture is engineered around the principle of <strong>Zero Data Retention</strong>. We believe your sensitive personal documents (such as Aadhaar cards, PAN cards, resumes, academic marksheets, financial statements, and confidential letters) belong exclusively to you.
@@ -133,25 +138,25 @@ export default function PrivacyPolicy() {
                                     Information We Process
                                 </h2>
                                 <p>
-                                    Depending on how you interact with QRPrintSetu, we process the following categories of data:
+                                    Depending on how you interact with Print Setu, we process the following categories of data:
                                 </p>
                                 <div className="space-y-2 pl-2">
                                     <div className="p-3.5 rounded-xl bg-card border border-border">
                                         <h4 className="font-bold text-foreground text-xs mb-1">A. End-Customer Uploaded Documents (Ephemeral Only)</h4>
                                         <p className="text-xs">
-                                            Files uploaded by walk-in customers (PDF, Word, PNG, JPG) are held in memory/volatile disk solely for the duration of the print queue transmission. Content is never indexed, stored permanently, scanned for advertising, or shared with third parties.
+                                            Files uploaded by walk-in customers (PDF, Word, PNG, JPG) are held in volatile memory/temporary encrypted disk solely for the duration of the print queue transmission. Content is never indexed, stored permanently, scanned for advertising, or shared with third parties.
                                         </p>
                                     </div>
                                     <div className="p-3.5 rounded-xl bg-card border border-border">
                                         <h4 className="font-bold text-foreground text-xs mb-1">B. Print Job Metadata</h4>
                                         <p className="text-xs">
-                                            Non-confidential technical parameters including page count, color preference (B&W vs Color), copy count, timestamp, transaction ID, and printer status code.
+                                            Non-confidential technical parameters including page count, color preference (B&W vs Color), copy count, timestamp, transaction reference ID, and printer status code.
                                         </p>
                                     </div>
                                     <div className="p-3.5 rounded-xl bg-card border border-border">
                                         <h4 className="font-bold text-foreground text-xs mb-1">C. Shop Owner Account Information</h4>
                                         <p className="text-xs">
-                                            When a shop registers, we store their business name, contact mobile number, email address, custom rate cards, and linked printer identifiers.
+                                            When a shop registers, we store their business name, contact mobile number, email address, custom rate cards in INR, and linked printer identifiers.
                                         </p>
                                     </div>
                                 </div>
@@ -180,10 +185,13 @@ export default function PrivacyPolicy() {
                             <section className="space-y-3">
                                 <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                                     <span className="text-primary font-mono text-sm">04.</span>
-                                    Payment Processing & Financial Data
+                                    Payment Processing & Financial Data Security
                                 </h2>
                                 <p>
-                                    All digital payments (UPI via Google Pay, PhonePe, Paytm, BHIM, Cred) are processed through RBI-authorized payment gateway partners. QRPrintSetu does not store credit card numbers, UPI PINs, or bank account credentials. We only receive cryptographic webhook confirmations indicating whether payment succeeded.
+                                    All digital transactions on the platform are billed in <strong>Indian Rupees (INR / ₹)</strong> and processed directly through our authorized payment gateway partner, <strong>Cashfree Payments India Pvt. Ltd.</strong> ("Cashfree").
+                                </p>
+                                <p>
+                                    Cashfree is certified under <strong>PCI-DSS Level 1</strong> and adheres to Reserve Bank of India (RBI) payment security directives. Print Setu does not capture, process, or store sensitive card credentials, CVVs, or UPI PINs on our servers. All transaction verifications are executed via secure server-to-server cryptographic HMAC-SHA256 webhooks.
                                 </p>
                             </section>
 
@@ -205,11 +213,12 @@ export default function PrivacyPolicy() {
                                     Contact & Grievance Redressal
                                 </h2>
                                 <p>
-                                    If you have any questions, concerns, or inquiries regarding this Privacy Policy, please contact our Data Protection Officer:
+                                    If you have any questions, concerns, or inquiries regarding this Privacy Policy, please contact our Data Protection and Grievance Officer:
                                 </p>
                                 <div className="p-4 rounded-xl bg-card border border-border space-y-1.5 text-xs text-foreground">
-                                    <div className="font-bold">QRPrintSetu Privacy & Compliance Desk</div>
-                                    <div>Email: <a href="mailto:mynatech.in@gmail.com" className="text-primary underline">mynatech.in@gmail.com</a></div>
+                                    <div className="font-bold">MynaTech Innovations (Print Setu Desk)</div>
+                                    <div>Address: Sector 62, Noida, Uttar Pradesh – 201309, India</div>
+                                    <div>Email: <a href="mailto:mynatech.in@gmail.com" className="text-primary underline">mynatech.in@gmail.com</a> / <a href="mailto:support@printsetu.in" className="text-primary underline">support@printsetu.in</a></div>
                                     <div>WhatsApp Help: <a href="https://wa.me/919098132966" target="_blank" rel="noopener noreferrer" className="text-primary underline">+91 90981 32966</a></div>
                                     <div>Availability: Monday to Saturday (9:00 AM – 8:00 PM IST)</div>
                                 </div>
@@ -219,11 +228,11 @@ export default function PrivacyPolicy() {
                         {/* Bottom Action */}
                         <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
                             <div className="text-xs text-muted-foreground">
-                                Read our companion <Link href="/security-declaration" className="text-primary font-semibold underline">Security Declaration</Link> for detailed hardware architecture specs.
+                                Also view our <Link href="/terms-and-conditions" className="text-primary font-semibold underline">Terms & Conditions</Link> and <Link href="/refund-policy" className="text-primary font-semibold underline">Refunds Policy</Link>.
                             </div>
                             <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
                                 <Link href="/">
-                                    Return to QRPrintSetu Home
+                                    Return to Home
                                 </Link>
                             </Button>
                         </div>

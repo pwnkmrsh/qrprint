@@ -70,5 +70,27 @@ class User extends Authenticatable
     {
         return $this->hasOne(ShopSetting::class);
     }
+
+    public function printSessions()
+    {
+        return $this->hasManyThrough(PrintSession::class, QrPrint::class);
+    }
+
+    public function printDocuments()
+    {
+        return $this->hasManyThrough(PrintDocument::class, QrPrint::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function getPrintJobsAttribute()
+    {
+        return PrintJob::whereHas('session.qrPrint', function ($q) {
+            $q->where('user_id', $this->id);
+        })->get();
+    }
 }
 

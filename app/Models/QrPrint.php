@@ -63,4 +63,9 @@ class QrPrint extends Model
     {
         return $this->hasOne(ShopSetting::class);
     }
+
+    public function printJobs()
+    {
+        return $this->hasManyThrough(PrintJob::class, PrintSession::class, 'qr_print_id', 'print_session_id');
+    }
 }

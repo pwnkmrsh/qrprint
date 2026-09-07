@@ -41,6 +41,30 @@ class AuthorizationRestrictionTest extends TestCase
         // Check Users
         $response = $this->actingAs($superAdmin)->get('/users');
         $response->assertStatus(200);
+
+        // Check Customers
+        $response = $this->actingAs($superAdmin)->get('/admin/customers');
+        $response->assertStatus(200);
+
+        // Check Orders
+        $response = $this->actingAs($superAdmin)->get('/admin/orders');
+        $response->assertStatus(200);
+
+        // Check Print Jobs
+        $response = $this->actingAs($superAdmin)->get('/admin/print-jobs');
+        $response->assertStatus(200);
+
+        // Check Payments Hub
+        $response = $this->actingAs($superAdmin)->get('/admin/payments');
+        $response->assertStatus(200);
+
+        // Check Print Agents
+        $response = $this->actingAs($superAdmin)->get('/admin/print-agents');
+        $response->assertStatus(200);
+
+        // Check Shops
+        $response = $this->actingAs($superAdmin)->get('/admin/shops');
+        $response->assertStatus(200);
     }
 
     public function test_shop_owner_is_denied_access_to_admin_modules(): void

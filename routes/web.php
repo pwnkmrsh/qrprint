@@ -30,13 +30,50 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
-Route::get('/privacy-policy', function () {
-    return Inertia::render('privacy-policy');
-})->name('privacy-policy');
+// Cashfree Whitelisting & Legal Compliance Routes
+Route::get('/contact-us', function () {
+    return Inertia::render('contact-us');
+})->name('contact-us');
+Route::get('/contact', function () {
+    return Inertia::render('contact-us');
+})->name('contact');
 
+Route::get('/terms-and-conditions', function () {
+    return Inertia::render('terms-of-service');
+})->name('terms-and-conditions');
 Route::get('/terms-of-service', function () {
     return Inertia::render('terms-of-service');
 })->name('terms-of-service');
+Route::get('/terms', function () {
+    return Inertia::render('terms-of-service');
+})->name('terms');
+
+Route::get('/refund-policy', function () {
+    return Inertia::render('refund-policy');
+})->name('refund-policy');
+Route::get('/refunds-and-cancellations', function () {
+    return Inertia::render('refund-policy');
+})->name('refunds-and-cancellations');
+Route::get('/cancellation-policy', function () {
+    return Inertia::render('refund-policy');
+})->name('cancellation-policy');
+Route::get('/cancellation-refund-policy', function () {
+    return Inertia::render('refund-policy');
+})->name('cancellation-refund-policy');
+
+Route::get('/pricing', function () {
+    return Inertia::render('pricing');
+})->name('pricing');
+Route::get('/products-and-pricing', function () {
+    return Inertia::render('pricing');
+})->name('products-and-pricing');
+Route::get('/services', function () {
+    return Inertia::render('pricing');
+})->name('services');
+
+Route::get('/privacy-policy', function () {
+    return Inertia::render('privacy-policy');
+})->name('privacy-policy');
 
 Route::get('/security-declaration', function () {
     return Inertia::render('security-declaration');
@@ -160,6 +197,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Shops Management
         Route::get('shops', [AdminShopController::class, 'index'])->name('shops.index');
+        Route::get('shops/{shop}', [AdminShopController::class, 'show'])->name('shops.show');
+        Route::put('shops/{shop}', [AdminShopController::class, 'update'])->name('shops.update');
         Route::post('shops/{shop}/toggle-active', [AdminShopController::class, 'toggleActive'])->name('shops.toggle-active');
 
         // Customers
@@ -177,6 +216,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('print-jobs', [AdminPrintJobController::class, 'index'])->name('print-jobs.index');
         Route::post('print-jobs/{job}/retry', [AdminPrintJobController::class, 'retry'])->name('print-jobs.retry');
         Route::post('print-jobs/{job}/cancel', [AdminPrintJobController::class, 'cancel'])->name('print-jobs.cancel');
+        Route::post('print-jobs/{job}/complete', [AdminPrintJobController::class, 'complete'])->name('print-jobs.complete');
 
         // Print Agents
         Route::get('print-agents', [AdminPrintAgentController::class, 'index'])->name('print-agents.index');
@@ -219,8 +259,10 @@ Route::post('/print/{token}/job/retry', [QrPrintController::class, 'retryJob'])-
 // Cashfree Payment Gateway Checkout & Webhook Routes
 Route::post('/print/{token}/cashfree/create-order', [CashfreePaymentController::class, 'createOrder'])->name('qr-print.cashfree.create-order');
 Route::get('/print/{token}/cashfree/return', [CashfreePaymentController::class, 'handleReturn'])->name('qr-print.cashfree.return');
+Route::post('/print/{token}/cashfree/verify', [CashfreePaymentController::class, 'verifyOrder'])->name('qr-print.cashfree.verify');
 Route::post('/s/{token}/cashfree/create-order', [CashfreePaymentController::class, 'createOrder'])->name('customer.cashfree.create-order');
 Route::get('/s/{token}/cashfree/return', [CashfreePaymentController::class, 'handleReturn'])->name('customer.cashfree.return');
+Route::post('/s/{token}/cashfree/verify', [CashfreePaymentController::class, 'verifyOrder'])->name('customer.cashfree.verify');
 Route::post('/payment/cashfree/webhook', [CashfreePaymentController::class, 'handleWebhook'])->name('payment.cashfree.webhook');
 
 Route::get(

@@ -156,6 +156,15 @@ test('print session handles partial failures and retries correctly', function ()
     $response->assertRedirect();
     $session = PrintSession::orderBy('id', 'desc')->first();
     expect($session->total_files)->toBe(2);
+    expect($session->status)->toBe('pending_payment');
+
+    // Confirm payment via PaymentManagerService
+    app(\App\Services\PaymentManagerService::class)->recordOnlineSuccess($session, [
+        'order_id' => 'ord_multi_test_123',
+        'order_amount' => 4.00,
+        'payment_method' => 'online',
+    ], 'cashfree');
+    $session->refresh();
     expect($session->status)->toBe('ready');
 
     // 3. Print Agent claims both jobs (sets status to printing)
@@ -206,7 +215,7 @@ test('print session handles partial failures and retries correctly', function ()
     expect($session->print_status)->toBe('printing');
 });
 
-test('online payment with UPI creates paid session and ready to print jobs immediately', function () {
+test('online payment session starts pending and activates print jobs only after server payment confirmation', function () {
     $owner = User::factory()->create();
     $qrPrint = QrPrint::create([
         'user_id' => $owner->id,
@@ -245,13 +254,41 @@ test('online payment with UPI creates paid session and ready to print jobs immed
     $response->assertRedirect();
     $session = PrintSession::orderBy('id', 'desc')->first();
     expect($session->payment_method)->toBe('upi');
-    expect($session->payment_status)->toBe('paid');
-    expect($session->print_status)->toBe('ready_to_print');
+    expect($session->payment_status)->toBe('pending');
+    expect($session->print_status)->toBe('pending_payment');
+    expect($session->status)->toBe('pending_payment');
     expect($session->total_amount)->toEqual(6.00); // 3 pages * 1 copy * 2.00
 
     $job = PrintJob::where('print_session_id', $session->id)->first();
-    expect($job->status)->toBe('pending');
+    expect($job->status)->toBe('pending_payment');
     expect($job->payment_method)->toBe('upi');
+
+    // Verify print agent CANNOT pull the job yet
+    $agentResponse = $this->get('/api/print-agent/jobs?agent_id=AGENT-001');
+    $agentResponse->assertOk();
+    $agentJobs = $agentResponse->json('jobs');
+    expect(collect($agentJobs)->pluck('uuid'))->not->toContain($job->uuid);
+
+    // Simulate server payment confirmation via PaymentManagerService
+    app(\App\Services\PaymentManagerService::class)->recordOnlineSuccess($session, [
+        'order_id' => 'ord_test_123',
+        'cf_order_id' => '998877',
+        'order_amount' => 6.00,
+        'payment_method' => 'upi',
+    ], 'cashfree');
+
+    $session->refresh();
+    $job->refresh();
+
+    expect($session->payment_status)->toBe('paid');
+    expect($session->print_status)->toBe('ready_to_print');
+    expect($job->status)->toBe('pending');
+
+    // Verify print agent CAN now retrieve the job
+    $agentResponse = $this->get('/api/print-agent/jobs?agent_id=AGENT-001');
+    $agentResponse->assertOk();
+    $agentJobs = $agentResponse->json('jobs');
+    expect(collect($agentJobs)->pluck('uuid'))->toContain($job->uuid);
 });
 
 test('shop owner can configure payment gateway provider and UPI settings', function () {

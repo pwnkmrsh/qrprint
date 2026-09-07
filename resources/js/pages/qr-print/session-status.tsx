@@ -5,16 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Head, Link } from '@inertiajs/react';
 import {
     AlertCircle,
-    ArrowRight,
     Check,
     CheckCircle2,
     Clock,
+    CreditCard,
     FileSpreadsheet,
     FileText,
     FileType2,
     ImageIcon,
     Loader2,
-    PartyPopper,
     Presentation,
     Printer,
     RefreshCw,
@@ -22,10 +21,6 @@ import {
     ShieldCheck,
     Sparkles,
     Store,
-    QrCode,
-    Banknote,
-    Phone,
-    MapPin
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
@@ -43,7 +38,7 @@ export interface SessionJob {
     amount?: number;
     payment_method?: string;
     selected_sheets: string[] | null;
-    status: 'pending' | 'printing' | 'printed' | 'failed' | string;
+    status: 'pending' | 'pending_payment' | 'printing' | 'printed' | 'failed' | string;
     attempts: number;
     error_message: string | null;
     created_at: string | null;
@@ -53,9 +48,10 @@ export interface SessionJob {
 interface SessionData {
     uuid: string;
     order_id?: string;
-    status: 'ready' | 'printing' | 'completed' | 'partial_failed' | 'failed' | 'cancelled' | string;
+    status: 'ready' | 'printing' | 'completed' | 'partial_failed' | 'failed' | 'cancelled' | 'pending_payment' | string;
     payment_method?: string;
     payment_status?: string;
+    print_status?: string;
     total_amount?: number;
     currency?: string;
     total_files: number;
@@ -72,11 +68,15 @@ interface SessionStatusProps {
         logo_url?: string | null;
         mobile_number?: string | null;
         address?: string | null;
+        upi_id?: string | null;
+        merchant_name?: string | null;
     };
     session: SessionData;
     jobs: SessionJob[];
     status_url: string;
     retry_url: string;
+    verify_payment_url?: string;
+    create_order_url?: string;
 }
 
 export default function SessionStatus({
@@ -85,20 +85,29 @@ export default function SessionStatus({
     jobs: initialJobs,
     status_url,
     retry_url,
+    verify_payment_url,
+    create_order_url,
 }: SessionStatusProps) {
     const [session, setSession] = useState<SessionData>(initialSession);
     const [jobs, setJobs] = useState<SessionJob[]>(initialJobs);
     const [retryingJobUuid, setRetryingJobUuid] = useState<string | null>(null);
+    const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
+    const [isStartingGateway, setIsStartingGateway] = useState<boolean>(false);
+    const [verificationMessage, setVerificationMessage] = useState<{ text: string; isSuccess: boolean } | null>(null);
     const [lastPolled, setLastPolled] = useState<Date>(new Date());
     const [retryMessage, setRetryMessage] = useState<string | null>(null);
 
+    const isPaid = session.payment_status === 'paid';
+    const isPendingPayment = !isPaid && (session.payment_status === 'pending' || session.payment_status === 'pending_payment' || !session.payment_status);
+    const isCounter = (session.payment_method || 'counter') === 'counter';
+
     const isAllFinished =
-        session.status === 'completed' ||
-        (session.status === 'failed' && jobs.every((j) => j.status === 'failed' || j.status === 'printed'));
+        isPaid &&
+        (session.status === 'completed' ||
+        (session.status === 'failed' && jobs.every((j) => j.status === 'failed' || j.status === 'printed')));
 
     const sym = session.currency || '₹';
     const totalAmount = Number(session.total_amount || 0).toFixed(2);
-    const isCounter = (session.payment_method || 'counter') === 'counter';
 
     // Real-time polling
     useEffect(() => {
@@ -121,10 +130,104 @@ export default function SessionStatus({
             } catch (err) {
                 // silent poll error
             }
-        }, 2000);
+        }, 2500);
 
         return () => clearInterval(interval);
     }, [status_url, isAllFinished]);
+
+    // Manual / Auto Server Payment Verification Check
+    const handleVerifyPayment = async () => {
+        if (!verify_payment_url) return;
+        setIsVerifyingPayment(true);
+        setVerificationMessage(null);
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+
+        try {
+            const res = await fetch(verify_payment_url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                },
+                body: JSON.stringify({
+                    session_uuid: session.uuid,
+                }),
+            });
+
+            const data = await res.json();
+            if (data.is_paid) {
+                setVerificationMessage({ text: '✅ Payment confirmed by server! Print jobs are now active and printing.', isSuccess: true });
+                // Refresh status data
+                const statusRes = await fetch(status_url, { headers: { Accept: 'application/json' } });
+                const statusData = await statusRes.json();
+                if (statusData.session && statusData.jobs) {
+                    setSession(statusData.session);
+                    setJobs(statusData.jobs);
+                }
+            } else {
+                setVerificationMessage({
+                    text: data.message || 'Payment is not yet confirmed by the payment gateway. If already paid, please allow a few seconds for the bank confirmation to reach the server.',
+                    isSuccess: false,
+                });
+            }
+        } catch (err: any) {
+            setVerificationMessage({ text: err.message || 'Error checking payment status.', isSuccess: false });
+        } finally {
+            setIsVerifyingPayment(false);
+        }
+    };
+
+    // Open Cashfree Checkout Modal / Drop SDK
+    const handlePayViaCashfree = async () => {
+        if (!create_order_url) return;
+        setIsStartingGateway(true);
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+
+        try {
+            const cfRes = await fetch(create_order_url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                },
+                body: JSON.stringify({
+                    session_uuid: session.uuid,
+                }),
+            });
+
+            const cfData = await cfRes.json();
+            if (cfRes.ok && cfData.success && cfData.payment_session_id) {
+                if (!(window as any).Cashfree) {
+                    const script = document.createElement('script');
+                    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+                    document.body.appendChild(script);
+                    await new Promise((resolve) => {
+                        script.onload = resolve;
+                    });
+                }
+
+                const cashfree = (window as any).Cashfree({
+                    mode: cfData.environment === 'production' ? 'production' : 'sandbox',
+                });
+
+                cashfree.checkout({
+                    paymentSessionId: cfData.payment_session_id,
+                    redirectTarget: '_self',
+                });
+            } else {
+                setVerificationMessage({
+                    text: cfData.message || 'Unable to open online checkout. Please pay using the shop UPI QR below.',
+                    isSuccess: false,
+                });
+            }
+        } catch (err: any) {
+            setVerificationMessage({ text: err.message || 'Gateway connection error.', isSuccess: false });
+        } finally {
+            setIsStartingGateway(false);
+        }
+    };
 
     // Handle Retry Job
     const handleRetry = async (jobUuid: string) => {
@@ -145,7 +248,6 @@ export default function SessionStatus({
             const data = await res.json();
             if (data.success) {
                 setRetryMessage('Job re-queued successfully! The printer agent will retry.');
-                // Update local job state optimistically
                 setJobs((prev) =>
                     prev.map((j) =>
                         j.uuid === jobUuid ? { ...j, status: 'pending', error_message: null, attempts: j.attempts + 1 } : j
@@ -194,25 +296,33 @@ export default function SessionStatus({
                             </div>
                         ) : (
                             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
-                                {session.status === 'completed' ? (
-                                    <CheckCircle2 className="size-8 text-emerald-500 animate-in zoom-in" />
-                                ) : session.status === 'failed' ? (
-                                    <AlertCircle className="size-8 text-destructive" />
+                                {isPaid ? (
+                                    session.status === 'completed' ? (
+                                        <CheckCircle2 className="size-8 text-emerald-500 animate-in zoom-in" />
+                                    ) : session.status === 'failed' ? (
+                                        <AlertCircle className="size-8 text-destructive" />
+                                    ) : (
+                                        <Printer className="size-8 animate-pulse text-primary" />
+                                    )
                                 ) : (
-                                    <Printer className="size-8 animate-pulse text-primary" />
+                                    <Clock className="size-8 text-amber-500 animate-pulse" />
                                 )}
                             </div>
                         )}
                         <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                            {session.payment_status === 'pending' && isCounter
-                                ? '⏳ Payment Pending'
+                            {isPendingPayment
+                                ? isCounter
+                                    ? '⏳ Payment Pending at Counter'
+                                    : '⏳ Awaiting Payment Confirmation'
                                 : session.status === 'completed'
-                                  ? 'Printing Completed Successfully!'
+                                  ? '🎉 Printing Completed Successfully!'
                                   : session.status === 'printing'
-                                    ? 'Printing in Progress…'
+                                    ? '🖨️ Printing in Progress…'
                                     : session.status === 'partial_failed'
-                                      ? 'Printing Finished with Alerts'
-                                      : 'Print Order Dispatched'
+                                      ? '⚠️ Printing Finished with Alerts'
+                                      : session.status === 'failed'
+                                        ? '❌ Printing Failed'
+                                        : '✅ Payment Confirmed — Dispatched to Printer'
                             }
                         </h1>
                         <p className="text-muted-foreground text-xs sm:text-sm">
@@ -222,36 +332,36 @@ export default function SessionStatus({
 
                     {/* Order & Payment Summary Box */}
                     <Card className={`shadow-xs border overflow-hidden ${
-                        session.payment_status === 'pending' && isCounter 
-                            ? 'bg-amber-500/5 border-amber-500/20' 
+                        isPendingPayment
+                            ? 'bg-amber-500/5 border-amber-500/25' 
                             : 'bg-primary/5 border-primary/20'
                     }`}>
                         <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                    {session.payment_status === 'pending' && isCounter ? (
+                                    {isPendingPayment ? (
                                         <Badge className="bg-amber-500 hover:bg-amber-600 text-white gap-1 text-xs">
                                             <Clock className="size-3" /> ⏳ Payment Pending
                                         </Badge>
                                     ) : isCounter ? (
                                         <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white gap-1 text-xs">
-                                            <Store className="size-3" /> Paid at Counter (Cash / UPI)
+                                            <Store className="size-3" /> Paid at Counter
                                         </Badge>
                                     ) : (
                                         <Badge className="bg-blue-600 hover:bg-blue-600 text-white gap-1 text-xs">
-                                            <QrCode className="size-3" /> Paid Online
+                                            <ShieldCheck className="size-3" /> Paid Online (Verified)
                                         </Badge>
                                     )}
                                     <span className="text-xs text-muted-foreground">
-                                        Status: <strong className="text-foreground capitalize">{session.payment_status?.replace('_', ' ') || 'Pending'}</strong>
+                                        Payment: <strong className="text-foreground capitalize">{session.payment_status || 'Pending'}</strong>
                                     </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    {session.payment_status === 'pending' && isCounter
-                                        ? 'Show this Order ID at shop counter.'
-                                        : isCounter
-                                          ? `Payment verified at counter. Your printout is spooling directly.`
-                                          : `Digital payment verified for ${sym}${totalAmount}. Your printout is spooling directly.`
+                                    {isPendingPayment
+                                        ? isCounter
+                                            ? 'Please pay at the shop counter. The merchant will approve and release your print job.'
+                                            : 'Payment is being verified with the server. Jobs will dispatch to the printer immediately once confirmed.'
+                                        : `Digital payment verified for ${sym}${totalAmount}. Jobs dispatched to printer tray.`
                                     }
                                 </p>
                             </div>
@@ -262,43 +372,114 @@ export default function SessionStatus({
                         </CardContent>
                     </Card>
 
+                    {/* Awaiting Online Payment Box (Action Card for Customer) */}
+                    {isPendingPayment && !isCounter && (
+                        <Card className="shadow-xs border border-blue-500/30 bg-blue-500/5 overflow-hidden animate-in fade-in">
+                            <CardHeader className="pb-3 border-b border-blue-500/20 bg-blue-500/10">
+                                <CardTitle className="text-sm font-bold flex items-center justify-between">
+                                    <span className="flex items-center gap-2 text-blue-950 dark:text-blue-200">
+                                        <CreditCard className="size-4 text-blue-600" />
+                                        Complete Online Payment ({sym}{totalAmount})
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px] bg-background text-blue-600 border-blue-500/30 font-semibold">
+                                        Instant Verification
+                                    </Badge>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 space-y-4">
+                                {verificationMessage && (
+                                    <Alert variant={verificationMessage.isSuccess ? 'default' : 'destructive'} className="text-xs">
+                                        <AlertDescription>{verificationMessage.text}</AlertDescription>
+                                    </Alert>
+                                )}
+
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                    Click below to pay online. All digital payment modes are supported: <strong>Google Pay, PhonePe, Paytm, BHIM UPI, Debit & Credit Cards, and NetBanking</strong>. Your print jobs will dispatch immediately upon server confirmation.
+                                </p>
+
+                                {/* Action Buttons: Pay via Gateway & Verify Status */}
+                                <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                                    {create_order_url && (
+                                        <Button
+                                            type="button"
+                                            size="default"
+                                            className="flex-1 font-bold gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm py-5 rounded-xl text-sm"
+                                            onClick={handlePayViaCashfree}
+                                            disabled={isStartingGateway}
+                                        >
+                                            {isStartingGateway ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+                                            Pay Online ({sym}{totalAmount})
+                                        </Button>
+                                    )}
+
+                                    {verify_payment_url && (
+                                        <Button
+                                            type="button"
+                                            size="default"
+                                            variant="outline"
+                                            className="font-bold gap-2 border-primary/30 py-5 rounded-xl text-sm"
+                                            onClick={handleVerifyPayment}
+                                            disabled={isVerifyingPayment}
+                                        >
+                                            {isVerifyingPayment ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                                            Check Status
+                                        </Button>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* Overall Progress Card */}
                     <Card className="shadow-xs border overflow-hidden">
                         <CardHeader className="bg-muted/15 border-b pb-4">
                             <div className="flex items-center justify-between">
                                 <CardTitle className="text-sm sm:text-base flex items-center gap-2">
                                     <Clock className="size-4 text-primary" />
-                                    Progress: {completedCount} of {session.total_files} Completed
+                                    {isPaid 
+                                        ? `Progress: ${completedCount} of ${session.total_files} Completed`
+                                        : `Documents in Order (${session.total_files})`
+                                    }
                                 </CardTitle>
                                 <Badge
                                     variant={
-                                        session.status === 'completed'
-                                            ? 'default'
-                                             : session.status === 'failed'
-                                               ? 'destructive'
-                                               : 'secondary'
+                                        !isPaid 
+                                            ? 'outline'
+                                            : session.status === 'completed'
+                                                ? 'default'
+                                                : session.status === 'failed'
+                                                  ? 'destructive'
+                                                  : 'secondary'
                                     }
                                     className="capitalize text-xs font-semibold py-1 px-2.5"
                                 >
-                                    {session.status === 'completed' && <Check className="size-3 mr-1 inline" />}
-                                    {session.status === 'printing' && <Loader2 className="size-3 mr-1 animate-spin inline" />}
-                                    {session.status}
+                                    {!isPaid ? (
+                                        <>⏳ Awaiting Payment</>
+                                    ) : (
+                                        <>
+                                            {session.status === 'completed' && <Check className="size-3 mr-1 inline" />}
+                                            {session.status === 'printing' && <Loader2 className="size-3 mr-1 animate-spin inline" />}
+                                            {session.status}
+                                        </>
+                                    )}
                                 </Badge>
                             </div>
 
-                            {/* Visual Progress Bar */}
-                            <div className="w-full bg-muted rounded-full h-2.5 mt-3 overflow-hidden">
-                                <div
-                                    className={`h-2.5 rounded-full transition-all duration-500 ${
-                                        session.status === 'completed'
-                                            ? 'bg-emerald-500'
-                                            : session.status === 'failed'
-                                              ? 'bg-destructive'
-                                              : 'bg-primary'
-                                    }`}
-                                    style={{ width: `${progressPercent}%` }}
-                                />
-                            </div>
+                            {/* Visual Progress Bar (active when paid) */}
+                            {isPaid && (
+                                <div className="w-full bg-muted rounded-full h-2.5 mt-3 overflow-hidden">
+                                    <div
+                                        className={`h-2.5 rounded-full transition-all duration-500 ${
+                                            session.status === 'completed'
+                                                ? 'bg-emerald-500'
+                                                : session.status === 'failed'
+                                                  ? 'bg-destructive'
+                                                  : 'bg-primary'
+                                        }`}
+                                        style={{ width: `${progressPercent}%` }}
+                                    />
+                                </div>
+                            )}
                         </CardHeader>
 
                         <CardContent className="p-4 sm:p-6 space-y-4">
@@ -310,8 +491,11 @@ export default function SessionStatus({
 
                             {/* Per-Job List */}
                             <div className="space-y-3">
-                                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Document Queue ({jobs.length})
+                                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                                    <span>Document Queue ({jobs.length})</span>
+                                    <span className="text-[11px] font-normal text-muted-foreground">
+                                        {isPaid ? 'Connected to printer agent' : 'Will print upon payment verification'}
+                                    </span>
                                 </div>
 
                                 <div className="space-y-2.5">
@@ -373,7 +557,12 @@ export default function SessionStatus({
 
                                             {/* Status Badge & Actions */}
                                             <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                                                {job.status === 'printed' ? (
+                                                {!isPaid ? (
+                                                    <span className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-md">
+                                                        <Clock className="size-3.5" />
+                                                        Pending Payment
+                                                    </span>
+                                                ) : job.status === 'printed' ? (
                                                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md">
                                                         <CheckCircle2 className="size-3.5" />
                                                         Printed
@@ -404,9 +593,9 @@ export default function SessionStatus({
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-md">
+                                                    <span className="inline-flex items-center gap-1 text-xs text-primary bg-primary/10 px-2.5 py-1 rounded-md font-medium">
                                                         <Clock className="size-3.5" />
-                                                        Queued
+                                                        Queued to Print
                                                     </span>
                                                 )}
                                             </div>
@@ -416,7 +605,7 @@ export default function SessionStatus({
                             </div>
 
                             {/* Session Success Banner */}
-                            {session.status === 'completed' && (
+                            {session.status === 'completed' && isPaid && (
                                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2 text-emerald-950 dark:text-emerald-200 animate-in fade-in">
                                     <div className="flex items-center gap-2 font-bold text-base text-emerald-700 dark:text-emerald-400">
                                         <Sparkles className="size-5" />
@@ -433,7 +622,7 @@ export default function SessionStatus({
                                 <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 border">
                                     <span className="flex items-center gap-2">
                                         <Loader2 className="size-3.5 animate-spin text-primary" />
-                                        Live printer agent polling active…
+                                        {isPaid ? 'Live printer agent polling active…' : 'Awaiting payment confirmation…'}
                                     </span>
                                     <span>Updated {lastPolled.toLocaleTimeString()}</span>
                                 </div>

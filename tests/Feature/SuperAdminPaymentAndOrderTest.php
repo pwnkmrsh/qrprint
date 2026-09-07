@@ -372,3 +372,82 @@ test('super admin payments hub displays payments and processes refunds', functio
     expect($payment->refund_amount)->toBe('100.00');
     expect($payment->refund_reason)->toBe('Defective print / customer cancelled');
 });
+
+test('client can verify payment status with server and activate print jobs', function () {
+    Http::fake([
+        'https://sandbox.cashfree.com/pg/orders/ord_verify_test_123' => Http::response([
+            'order_id' => 'ord_verify_test_123',
+            'cf_order_id' => '99887766',
+            'order_status' => 'PAID',
+            'order_amount' => 30.00,
+            'order_currency' => 'INR',
+        ], 200),
+    ]);
+
+    SystemSetting::set('cashfree_app_id', 'test_app_id', 'cashfree');
+    SystemSetting::set('cashfree_secret_key', 'test_secret_key', 'cashfree');
+    SystemSetting::set('cashfree_environment', 'sandbox', 'cashfree');
+
+    $owner = User::factory()->create();
+    $qrPrint = QrPrint::create([
+        'user_id' => $owner->id,
+        'uuid' => (string) Str::uuid(),
+        'title' => 'Verify Test Point',
+        'print_token' => 'verify-token-123',
+        'is_active' => true,
+    ]);
+
+    $doc = PrintDocument::create([
+        'qr_print_id' => $qrPrint->id,
+        'original_name' => 'doc.pdf',
+        'stored_name' => 'doc.pdf',
+        'mime_type' => 'application/pdf',
+        'file_size' => 1024,
+        'disk' => 'public',
+        'path' => 'print-documents/doc.pdf',
+        'file_type' => 'pdf',
+        'metadata' => ['page_count' => 1],
+        'status' => 'ready',
+    ]);
+
+    $session = PrintSession::create([
+        'qr_print_id' => $qrPrint->id,
+        'total_files' => 1,
+        'status' => 'pending_payment',
+        'payment_method' => 'online',
+        'payment_status' => 'pending',
+        'print_status' => 'pending_payment',
+        'total_amount' => 30.00,
+        'currency' => '₹',
+    ]);
+
+    $job = PrintJob::create([
+        'print_session_id' => $session->id,
+        'print_document_id' => $doc->id,
+        'copies' => 1,
+        'color_mode' => 'bw',
+        'paper_size' => 'A4',
+        'status' => 'pending_payment',
+        'amount' => 30.00,
+    ]);
+
+    $res = $this->postJson(route('qr-print.cashfree.verify', 'verify-token-123'), [
+        'session_uuid' => $session->uuid,
+        'order_id' => 'ord_verify_test_123',
+    ]);
+
+    $res->assertOk()
+        ->assertJson([
+            'success' => true,
+            'is_paid' => true,
+            'payment_status' => 'paid',
+            'print_status' => 'ready_to_print',
+        ]);
+
+    $session->refresh();
+    $job->refresh();
+
+    expect($session->payment_status)->toBe('paid');
+    expect($session->print_status)->toBe('ready_to_print');
+    expect($job->status)->toBe('pending');
+});

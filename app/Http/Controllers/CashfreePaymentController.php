@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Payment;
 use App\Models\PrintSession;
 use App\Models\QrPrint;
 use App\Models\ShopSetting;
@@ -56,6 +57,26 @@ class CashfreePaymentController extends Controller
         if (!$result['success']) {
             return response()->json($result, 422);
         }
+
+        // Record pending payment entry mapped to the gateway order id
+        Payment::updateOrCreate(
+            [
+                'print_session_id' => $session->id,
+                'gateway_order_id' => $result['order_id'],
+            ],
+            [
+                'qr_print_id' => $session->qr_print_id,
+                'order_id' => $session->formatted_order_id,
+                'payment_method' => 'cashfree',
+                'payment_type' => 'online',
+                'gateway' => 'cashfree',
+                'gateway_order_id' => $result['order_id'],
+                'amount' => (float)$session->total_amount,
+                'currency' => $session->currency ?: 'INR',
+                'status' => 'pending',
+                'gateway_response' => $result['raw'] ?? [],
+            ]
+        );
 
         return response()->json([
             'success' => true,
@@ -171,6 +192,73 @@ class CashfreePaymentController extends Controller
         }
 
         return response()->json(['status' => 'OK']);
+    }
+
+    /**
+     * Real-time payment verification endpoint for client polling and manual verification.
+     */
+    public function verifyOrder(Request $request, string $token)
+    {
+        $qrPrint = QrPrint::where('print_token', $token)->firstOrFail();
+
+        $validated = $request->validate([
+            'session_uuid' => ['required', 'string'],
+            'order_id' => ['nullable', 'string'],
+        ]);
+
+        $session = PrintSession::where('uuid', $validated['session_uuid'])
+            ->where('qr_print_id', $qrPrint->id)
+            ->firstOrFail();
+
+        // 1. If already verified in database
+        if ($session->payment_status === 'paid') {
+            return response()->json([
+                'success' => true,
+                'is_paid' => true,
+                'payment_status' => 'paid',
+                'print_status' => $session->print_status,
+                'message' => 'Payment already verified.',
+            ]);
+        }
+
+        // 2. Identify Cashfree Gateway Order ID
+        $orderId = $validated['order_id'] ?? null;
+        if (empty($orderId)) {
+            $latestPayment = $session->payments()->whereNotNull('gateway_order_id')->latest()->first();
+            $orderId = $latestPayment?->gateway_order_id;
+        }
+
+        // 3. Query Cashfree PG API directly
+        if (!empty($orderId)) {
+            $statusCheck = $this->cashfree->getOrderStatus($orderId, $qrPrint->shopSetting);
+            if ($statusCheck['success'] && !empty($statusCheck['is_paid'])) {
+                $this->paymentManager->recordOnlineSuccess($session, $statusCheck['raw'], 'cashfree');
+                $session->refresh();
+
+                return response()->json([
+                    'success' => true,
+                    'is_paid' => true,
+                    'payment_status' => 'paid',
+                    'print_status' => $session->print_status,
+                    'message' => 'Payment confirmed by server! Print jobs activated.',
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'is_paid' => false,
+                'payment_status' => $session->payment_status,
+                'order_status' => $statusCheck['order_status'] ?? 'ACTIVE',
+                'message' => 'Payment is awaiting gateway completion.',
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'is_paid' => false,
+            'payment_status' => $session->payment_status,
+            'message' => 'No gateway transaction found.',
+        ]);
     }
 
     /**

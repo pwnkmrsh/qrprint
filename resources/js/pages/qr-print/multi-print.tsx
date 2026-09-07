@@ -538,7 +538,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
         setIsCreatingSession(true);
         const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
-        const finalPaymentMethod = paymentMethod === 'online' ? (onlineSubMode === 'card' ? 'card' : 'upi') : 'counter';
+        const finalPaymentMethod = paymentMethod === 'online' ? 'online' : 'counter';
 
         const payload = {
             payment_method: finalPaymentMethod,
@@ -578,8 +578,8 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                 throw new Error(data.message || 'Failed to initialize print session.');
             }
 
-            // If paying online via Card / Gateway and Cashfree is configured
-            if (paymentMethod === 'online' && onlineSubMode === 'card' && data.session_uuid) {
+            // If paying online and gateway order can be created
+            if (paymentMethod === 'online' && data.session_uuid) {
                 try {
                     const cfRes = await fetch(route('qr-print.cashfree.create-order', qrPrint.token), {
                         method: 'POST',
@@ -616,7 +616,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                         return;
                     }
                 } catch (cfErr) {
-                    console.warn('Cashfree SDK initialization fallback to standard status page', cfErr);
+                    console.warn('Cashfree SDK initialization fallback to status page', cfErr);
                 }
             }
 
@@ -1295,7 +1295,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
 
                             {/* Payment Options Selection Box */}
                             <Card className="border border-border shadow-xs overflow-hidden">
-                                <CardHeader className="bg-muted/15 border-b pb-3">
+                                <CardHeader className="pb-3 border-b">
                                     <CardTitle className="text-base flex items-center justify-between">
                                         <span className="flex items-center gap-2">
                                             <Banknote className="size-4 text-primary" />
@@ -1307,17 +1307,17 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                         </Badge>
                                     </CardTitle>
                                     <CardDescription className="text-xs">
-                                        Choose your preferred payment method. Online payments via UPI are processed and spooled instantly.
+                                        Choose how you would like to pay for your print order.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="p-4 space-y-4">
                                     {/* Primary Payment Mode Selection */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {/* Option 1: Pay Online (UPI / Card) - Pre-selected by default */}
+                                        {/* Option 1: Pay Online (Cashfree Gateway) */}
                                         {canOnline && (
                                             <label
                                                 onClick={() => setPaymentMethod('online')}
-                                                className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all ${
+                                                className={`relative flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-all ${
                                                     paymentMethod === 'online'
                                                         ? 'border-primary bg-primary/5 ring-1 ring-primary shadow-xs'
                                                         : 'border-input bg-card hover:bg-muted/30'
@@ -1332,19 +1332,19 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                                     className="sr-only"
                                                 />
                                                 <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
-                                                    <QrCode className="size-5" />
+                                                    <CreditCard className="size-5" />
                                                 </div>
                                                 <div className="flex-1 space-y-1">
                                                     <div className="flex items-center justify-between">
                                                         <span className="font-bold text-sm text-foreground">
-                                                            Pay Online (UPI / Card)
+                                                            Pay Online
                                                         </span>
                                                         <Badge variant="secondary" className="text-[10px] bg-blue-500/10 text-blue-600 font-bold">
-                                                            Recommended
+                                                            UPI / Cards / NetBanking
                                                         </Badge>
                                                     </div>
                                                     <p className="text-xs text-muted-foreground leading-relaxed">
-                                                        Instant payment via Google Pay, PhonePe, Paytm, BHIM UPI or Cards.
+                                                        Instant payment via Google Pay, PhonePe, Paytm, BHIM UPI, Cards or NetBanking.
                                                     </p>
                                                 </div>
                                             </label>
@@ -1354,7 +1354,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                         {canCounter && (
                                             <label
                                                 onClick={() => setPaymentMethod('counter')}
-                                                className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all ${
+                                                className={`relative flex cursor-pointer items-start gap-3.5 rounded-xl border p-4 transition-all ${
                                                     paymentMethod === 'counter'
                                                         ? 'border-primary bg-primary/5 ring-1 ring-primary shadow-xs'
                                                         : 'border-input bg-card hover:bg-muted/30'
@@ -1377,172 +1377,16 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                                             Pay at Shop Counter
                                                         </span>
                                                         <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold">
-                                                            Cash / QR
+                                                            Cash
                                                         </Badge>
                                                     </div>
                                                     <p className="text-xs text-muted-foreground leading-relaxed">
-                                                        Job spools to printer immediately. Pay in cash or QR at counter upon collection.
+                                                        Pay in cash at the counter upon collecting your printed documents.
                                                     </p>
                                                 </div>
                                             </label>
                                         )}
                                     </div>
-
-                                    {/* Online Payment Sub-selection & Dynamic UPI QR Section */}
-                                    {paymentMethod === 'online' && (
-                                        <div className="p-4 rounded-2xl border border-primary/20 bg-gradient-to-b from-primary/5 via-background to-muted/20 space-y-4">
-                                            {/* Sub-mode Tabs (UPI vs Card) */}
-                                            <div className="flex items-center justify-between border-b pb-3">
-                                                <div className="space-y-0.5">
-                                                    <span className="font-bold text-sm text-foreground flex items-center gap-1.5">
-                                                        <Smartphone className="size-4 text-primary" />
-                                                        Online Payment Method
-                                                    </span>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        UPI is selected by default for fast mobile checkout.
-                                                    </p>
-                                                </div>
-                                                <div className="flex bg-muted/60 p-1 rounded-lg border">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setOnlineSubMode('upi')}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                                            onlineSubMode === 'upi'
-                                                                ? 'bg-primary text-primary-foreground shadow-xs'
-                                                                : 'text-muted-foreground hover:text-foreground'
-                                                        }`}
-                                                    >
-                                                        <QrCode className="size-3.5" />
-                                                        UPI (Default)
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setOnlineSubMode('card')}
-                                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                                            onlineSubMode === 'card'
-                                                                ? 'bg-primary text-primary-foreground shadow-xs'
-                                                                : 'text-muted-foreground hover:text-foreground'
-                                                        }`}
-                                                    >
-                                                        <CreditCard className="size-3.5" />
-                                                        Card / NetBanking
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* Sub-option 1: UPI Dynamic QR & App Intent (Default Active) */}
-                                            {onlineSubMode === 'upi' && (
-                                                <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
-                                                    {/* QR Code Container */}
-                                                    <div className="flex flex-col items-center justify-center p-3 rounded-xl border bg-background shadow-xs text-center">
-                                                        <img
-                                                            src={qrCodeImgUrl}
-                                                            alt="Scan UPI QR"
-                                                            className="size-36 object-contain rounded-md"
-                                                        />
-                                                        <span className="text-[11px] font-bold text-foreground mt-2">
-                                                            Scan & Pay {sym}{totalCalculatedCost.toFixed(2)}
-                                                        </span>
-                                                        <span className="text-[9px] text-muted-foreground">
-                                                            Any UPI Scanner App
-                                                        </span>
-                                                    </div>
-
-                                                    {/* UPI Details & Mobile App Trigger Links */}
-                                                    <div className="space-y-3">
-                                                        <div className="space-y-1">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs font-semibold text-foreground">
-                                                                    Merchant UPI VPA
-                                                                </span>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={handleCopyUpiId}
-                                                                    className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
-                                                                >
-                                                                    {copiedUpi ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-                                                                    {copiedUpi ? 'Copied' : 'Copy ID'}
-                                                                </button>
-                                                            </div>
-                                                            <div className="p-2.5 rounded-lg border bg-background font-mono text-xs text-foreground flex items-center justify-between">
-                                                                <span className="truncate">{shopUpiId}</span>
-                                                                <Badge variant="outline" className="text-[10px] py-0 px-1.5 shrink-0">
-                                                                    {shopMerchantName}
-                                                                </Badge>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* 1-Tap App Deep-links for Mobile Users */}
-                                                        <div className="space-y-1.5">
-                                                            <span className="text-[11px] font-semibold text-muted-foreground block">
-                                                                Or Open Directly in UPI App:
-                                                            </span>
-                                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                                <a
-                                                                    href={gpayUri}
-                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-foreground"
-                                                                >
-                                                                    <span className="text-blue-500 font-extrabold">G</span>Pay
-                                                                </a>
-                                                                <a
-                                                                    href={phonepeUri}
-                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-foreground"
-                                                                >
-                                                                    <span className="text-purple-600 font-extrabold">Ph</span>onePe
-                                                                </a>
-                                                                <a
-                                                                    href={paytmUri}
-                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-foreground"
-                                                                >
-                                                                    <span className="text-sky-500 font-extrabold">Pay</span>tm
-                                                                </a>
-                                                                <a
-                                                                    href={upiUri}
-                                                                    className="p-2 rounded-lg border bg-background hover:bg-muted/40 text-center text-xs font-bold flex items-center justify-center gap-1 transition-colors text-primary"
-                                                                >
-                                                                    <ExternalLink className="size-3" /> Any UPI
-                                                                </a>
-                                                            </div>
-                                                        </div>
-
-                                                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-0.5">
-                                                            <Sparkles className="size-3.5 text-primary shrink-0" />
-                                                            <span>Once payment is initiated, click the button below to dispatch print jobs.</span>
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Sub-option 2: Debit / Credit Card / NetBanking */}
-                                            {onlineSubMode === 'card' && (
-                                                <div className="p-4 rounded-xl border bg-background shadow-xs space-y-3">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <CreditCard className="size-5 text-blue-600" />
-                                                            <span className="font-bold text-sm text-foreground">
-                                                                Debit & Credit Card Gateway
-                                                            </span>
-                                                        </div>
-                                                        <Badge variant="outline" className="text-[10px]">
-                                                            {shopSettings?.gateway_provider ? shopSettings.gateway_provider.toUpperCase() : 'RAZORPAY'}
-                                                        </Badge>
-                                                    </div>
-
-                                                    <p className="text-xs text-muted-foreground leading-relaxed">
-                                                        Supports Visa, MasterCard, RuPay, Maestro, Corporate NetBanking and digital wallet balances.
-                                                    </p>
-
-                                                    <div className="flex flex-wrap gap-2 pt-1">
-                                                        <Badge variant="secondary" className="text-[10px]">Visa</Badge>
-                                                        <Badge variant="secondary" className="text-[10px]">MasterCard</Badge>
-                                                        <Badge variant="secondary" className="text-[10px]">RuPay</Badge>
-                                                        <Badge variant="secondary" className="text-[10px]">NetBanking (50+ Banks)</Badge>
-                                                        <Badge variant="secondary" className="text-[10px]">Wallets</Badge>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
                                 </CardContent>
                             </Card>
 
@@ -1591,7 +1435,7 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                         <div className="mx-auto max-w-4xl flex items-center justify-between gap-4">
                             <div>
                                 <div className="text-xs text-muted-foreground font-medium">
-                                    Total ({files.length} files) · {paymentMethod === 'counter' ? 'Pay at Counter' : `Online (${onlineSubMode.toUpperCase()})`}
+                                    Total ({files.length} files) · {paymentMethod === 'counter' ? 'Pay at Counter' : 'Pay Online'}
                                 </div>
                                 <div className="text-xl sm:text-2xl font-black text-primary">
                                     {sym}{totalCalculatedCost.toFixed(2)}
@@ -1607,26 +1451,17 @@ export default function MultiPrint({ qrPrint, shopSettings, limits }: MultiPrint
                                 {isCreatingSession ? (
                                     <>
                                         <Loader2 className="size-5 animate-spin" />
-                                        Dispatching Print Jobs…
+                                        Processing Order…
+                                    </>
+                                ) : paymentMethod === 'counter' ? (
+                                    <>
+                                        <Printer className="size-5" />
+                                        🖨️ Pay at Counter & Print ({sym}{totalCalculatedCost.toFixed(2)})
                                     </>
                                 ) : (
                                     <>
-                                        {paymentMethod === 'counter' ? (
-                                            <>
-                                                <Printer className="size-5" />
-                                                🖨️ Pay at Counter & Print ({sym}{totalCalculatedCost.toFixed(2)})
-                                            </>
-                                        ) : onlineSubMode === 'upi' ? (
-                                            <>
-                                                <QrCode className="size-5" />
-                                                🟢 Pay via UPI & Print ({sym}{totalCalculatedCost.toFixed(2)})
-                                            </>
-                                        ) : (
-                                            <>
-                                                <CreditCard className="size-5" />
-                                                💳 Pay via Card & Print ({sym}{totalCalculatedCost.toFixed(2)})
-                                            </>
-                                        )}
+                                        <CreditCard className="size-5" />
+                                        💳 Pay Online & Print ({sym}{totalCalculatedCost.toFixed(2)})
                                     </>
                                 )}
                             </Button>

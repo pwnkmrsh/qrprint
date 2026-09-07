@@ -890,14 +890,24 @@ export default function Welcome() {
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
                                 <Badge variant="secondary" className="px-3 py-1 bg-primary/10 text-primary border-primary/20">
-                                    Transparent SaaS Pricing
+                                    Transparent SaaS Pricing in INR (₹)
                                 </Badge>
                                 <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
                                     Simple, Transparent Plans for Every Print Shop
                                 </h2>
                                 <p className="text-muted-foreground text-sm sm:text-base">
-                                    Start for free, then upgrade as your daily customer volume grows. No hidden transaction fees.
+                                    All subscriptions and retail print services are billed and settled strictly in <strong>Indian Rupees (INR / ₹)</strong> via Cashfree Payment Gateway.
                                 </p>
+
+                                {/* Rate Card & Calculator CTA */}
+                                <div className="pt-1 flex flex-wrap items-center justify-center gap-2 text-xs">
+                                    <Button asChild variant="outline" size="sm" className="border-border bg-card hover:bg-muted text-xs">
+                                        <Link href="/pricing" className="gap-1.5">
+                                            <FileText className="h-3.5 w-3.5 text-primary" />
+                                            <span>View Retail Document Rate Card & Calculator</span>
+                                        </Link>
+                                    </Button>
+                                </div>
 
                                 {/* Billing Toggle */}
                                 <div className="pt-4 flex items-center justify-center gap-3 text-sm">
@@ -1285,36 +1295,51 @@ export default function Welcome() {
                                 </Card>
                             </div>
 
-                            {/* Open Dedicated Legal Pages in New Tabs */}
+                                    {/* Open Dedicated Legal Pages in New Tabs */}
                             <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-xs">
-                                <a
+                                <Link
+                                    href="/contact-us"
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card border border-border text-foreground hover:text-primary hover:border-primary transition-colors font-medium shadow-xs"
+                                >
+                                    <span>Contact Us</span>
+                                    <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
+                                </Link>
+                                <Link
+                                    href="/terms-and-conditions"
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card border border-border text-foreground hover:text-primary hover:border-primary transition-colors font-medium shadow-xs"
+                                >
+                                    <span>Terms and Conditions</span>
+                                    <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
+                                </Link>
+                                <Link
+                                    href="/refund-policy"
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card border border-border text-foreground hover:text-primary hover:border-primary transition-colors font-medium shadow-xs"
+                                >
+                                    <span>Refunds & Cancellations</span>
+                                    <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
+                                </Link>
+                                <Link
                                     href="/privacy-policy"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card border border-border text-foreground hover:text-primary hover:border-primary transition-colors font-medium shadow-xs"
                                 >
-                                    <span>Open Privacy Policy</span>
+                                    <span>Privacy Policy</span>
                                     <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
-                                </a>
-                                <a
-                                    href="/terms-of-service"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                </Link>
+                                <Link
+                                    href="/pricing"
                                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card border border-border text-foreground hover:text-primary hover:border-primary transition-colors font-medium shadow-xs"
                                 >
-                                    <span>Open Terms of Service</span>
+                                    <span>Pricing in INR (₹)</span>
                                     <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
-                                </a>
-                                <a
+                                </Link>
+                                <Link
                                     href="/security-declaration"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-semibold hover:bg-primary/15 transition-colors shadow-xs"
                                 >
                                     <ShieldCheck className="h-3.5 w-3.5" />
-                                    <span>Open Security Declaration Page</span>
+                                    <span>Security Declaration</span>
                                     <ArrowUpRight className="h-3.5 w-3.5" />
-                                </a>
+                                </Link>
                             </div>
                         </div>
                     </section>
@@ -1367,6 +1392,16 @@ export default function Welcome() {
 
                                             <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/60">
                                                 <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                                    <Building2 className="h-4 w-4" />
+                                                </div>
+                                                <div>
+                                                    <div className="font-semibold">Registered Office (India)</div>
+                                                    <div className="text-xs text-muted-foreground">MynaTech Innovations, Sector 62, Noida, UP 201309</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/60">
+                                                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                                                     <Clock className="h-4 w-4" />
                                                 </div>
                                                 <div>
@@ -1377,17 +1412,21 @@ export default function Welcome() {
                                         </div>
                                     </Card>
 
-                                    {/* Quick FAQ Mini Card */}
+                                    {/* Dedicated Page Link Card */}
                                     <Card className="p-6 space-y-3 bg-card border-border">
                                         <h4 className="font-bold text-sm flex items-center gap-1.5 text-primary">
                                             <HelpCircle className="h-4 w-4 text-primary" />
-                                            <span>Frequently Asked Question</span>
+                                            <span>Official Grievance & Whitelisting Desk</span>
                                         </h4>
                                         <p className="text-xs text-muted-foreground leading-relaxed">
-                                            <strong>Do I need a special printer?</strong>
-                                            <br />
-                                            No! Any printer (Canon, HP, Epson, Brother) connected to your Windows computer works seamlessly out of the box.
+                                            For payment reconciliation, billing disputes, or grievance escalations, visit our dedicated contact desk.
                                         </p>
+                                        <Button asChild variant="outline" size="sm" className="w-full text-xs border-border bg-card hover:bg-muted">
+                                            <Link href="/contact-us" className="gap-1.5">
+                                                <span>Open Full Contact Us Page</span>
+                                                <ArrowRight className="h-3.5 w-3.5" />
+                                            </Link>
+                                        </Button>
                                     </Card>
                                 </div>
 
