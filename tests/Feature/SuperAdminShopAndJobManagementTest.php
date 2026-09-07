@@ -2,7 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Document;
+use App\Models\PrintAgent;
+use App\Models\PrintDocument;
 use App\Models\Printer;
 use App\Models\PrintJob;
 use App\Models\PrintSession;
@@ -40,7 +41,7 @@ class SuperAdminShopAndJobManagementTest extends TestCase
         ]);
         $this->shopOwner->roles()->attach($shopOwnerRole);
 
-        Shop::create([
+        $shop = Shop::create([
             'user_id' => $this->shopOwner->id,
             'shop_name' => 'Apex Print Corner',
             'mobile' => '9876543210',
@@ -108,16 +109,19 @@ class SuperAdminShopAndJobManagementTest extends TestCase
 
     public function test_super_admin_can_view_shop_details_and_update_rates()
     {
-        Printer::create([
+        $agent = PrintAgent::create([
             'shop_id' => $this->shopOwner->shop->id,
+            'agent_id' => 'agent_apex_01',
+            'name' => 'Shop Front Desktop',
+            'status' => 'online',
+        ]);
+
+        Printer::create([
+            'agent_id' => $agent->agent_id,
             'qr_print_id' => $this->shopQr->id,
             'name' => 'HP LaserJet Pro',
-            'connection_type' => 'network',
-            'ip_address' => '192.168.1.50',
             'status' => 'online',
             'is_default' => true,
-            'color_support' => true,
-            'duplex_support' => true,
         ]);
 
         $response = $this->actingAs($this->superAdmin)->get(route('admin.shops.show', $this->shopQr->id));
@@ -159,20 +163,20 @@ class SuperAdminShopAndJobManagementTest extends TestCase
             'status' => 'ready_for_print',
         ]);
 
-        $document = Document::create([
-            'print_session_id' => $session->id,
+        $document = PrintDocument::create([
             'qr_print_id' => $this->shopQr->id,
             'original_name' => 'Report.pdf',
-            'file_name' => 'Report.pdf',
-            'file_path' => 'documents/report.pdf',
-            'file_type' => 'pdf',
+            'stored_name' => 'Report.pdf',
+            'mime_type' => 'application/pdf',
             'file_size' => 1024,
-            'page_count' => 2,
+            'disk' => 'local',
+            'path' => 'documents/report.pdf',
+            'file_type' => 'pdf',
         ]);
 
         $job = PrintJob::create([
             'print_session_id' => $session->id,
-            'document_id' => $document->id,
+            'print_document_id' => $document->id,
             'printer_name' => 'HP LaserJet',
             'copies' => 1,
             'color_mode' => 'bw',
@@ -207,7 +211,7 @@ class SuperAdminShopAndJobManagementTest extends TestCase
         // 4. Cancel job
         $cancelJob = PrintJob::create([
             'print_session_id' => $session->id,
-            'document_id' => $document->id,
+            'print_document_id' => $document->id,
             'status' => 'pending',
         ]);
         $cancelResponse = $this->actingAs($this->superAdmin)->post(route('admin.print-jobs.cancel', $cancelJob->id));

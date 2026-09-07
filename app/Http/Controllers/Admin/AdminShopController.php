@@ -82,7 +82,7 @@ class AdminShopController extends Controller
      */
     public function show(QrPrint $shop)
     {
-        $shop->load(['user.shop', 'shopSetting', 'printers.auditLogs']);
+        $shop->load(['user.shop', 'shopSetting', 'printers']);
 
         $recentSessions = PrintSession::with(['payments', 'jobs.document'])
             ->where('qr_print_id', $shop->id)

@@ -21,7 +21,9 @@ import {
     ShoppingBag, 
     Cpu,
     LifeBuoy,
-    Copy
+    Copy,
+    DollarSign,
+    Sliders
 } from 'lucide-react';
 import AppLogo from './app-logo';
 import { useState } from 'react';
@@ -29,6 +31,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+/* -------------------------------------------------------------
+ * Shop Owner Menu Groups (Focused & Clean)
+ * ------------------------------------------------------------- */
 const shopOperationsGroup: NavItem[] = [
     {
         title: 'Dashboard',
@@ -36,9 +41,53 @@ const shopOperationsGroup: NavItem[] = [
         icon: LayoutGrid,
     },
     {
-        title: 'Global Settings',
-        href: '/admin/settings',
-        icon: Settings,
+        title: 'Job History & Spool',
+        href: '/shop/jobs',
+        icon: History,
+    },
+    {
+        title: 'Counter QR Poster',
+        href: '/dashboard/qr/print',
+        icon: QrCode,
+    },
+];
+
+const shopSettingsGroup: NavItem[] = [
+    {
+        title: 'Shop Profile & Pricing',
+        href: '/shop/settings',
+        icon: Store,
+    },
+    {
+        title: 'Payment Gateway & UPI',
+        href: '/shop/settings?tab=payment',
+        icon: CreditCard,
+    },
+    {
+        title: 'Printer Hardware',
+        href: '/shop/printers',
+        icon: Printer,
+    },
+];
+
+/* -------------------------------------------------------------
+ * Super Admin Menu Groups (Full Platform Access)
+ * ------------------------------------------------------------- */
+const superAdminPlatformGroup: NavItem[] = [
+    {
+        title: 'Dashboard',
+        href: '/dashboard',
+        icon: LayoutGrid,
+    },
+    {
+        title: 'Shops Management',
+        href: '/admin/shops',
+        icon: Store,
+    },
+    {
+        title: 'Customer Orders',
+        href: '/admin/orders',
+        icon: ShoppingBag,
     },
     {
         title: 'Payments Hub',
@@ -46,51 +95,28 @@ const shopOperationsGroup: NavItem[] = [
         icon: CreditCard,
     },
     {
-        title: 'Orders',
-        href: '/admin/orders',
-        icon: ShoppingBag,
-    },
-    {
-        title: 'Shops',
-        href: '/admin/shops',
-        icon: Store,
-    },
-    {
-        title: 'Customers',
+        title: 'Customer Directory',
         href: '/admin/customers',
         icon: Users,
     },
     {
-        title: 'Print Jobs',
+        title: 'Hardware Print Jobs',
         href: '/admin/print-jobs',
         icon: Printer,
     },
     {
-        title: 'Print Agents',
+        title: 'Print Bridge Agents',
         href: '/admin/print-agents',
         icon: Cpu,
     },
     {
-        title: 'Job History',
-        href: '/shop/jobs',
-        icon: History,
+        title: 'Global System Settings',
+        href: '/admin/settings',
+        icon: Settings,
     },
 ];
 
-const settingsGroup: NavItem[] = [
-    {
-        title: 'Shop Settings',
-        href: '/shop/settings',
-        icon: Store,
-    },
-    {
-        title: 'Printer Settings',
-        href: '/shop/printers',
-        icon: Printer,
-    },
-];
-
-const adminGroup: NavItem[] = [
+const superAdminAdministrationGroup: NavItem[] = [
     {
         title: 'Users',
         href: '/users',
@@ -121,30 +147,24 @@ const adminGroup: NavItem[] = [
         icon: Menu,
         permission: 'access-menus-module',
     },
-    {
-        title: 'System Settings',
-        href: '/admin/settings',
-        icon: Settings,
-        permission: 'access-users-module',
-    },
 ];
-
 
 export function AppSidebar() {
     const { auth, system_settings } = usePage().props as any;
-    const permissions = auth.permissions || [];
-    const shopToken = auth.shop?.print_token || 'DEMO_A5D76E37';
+    const permissions: string[] = auth?.permissions || [];
+    const roles: string[] = auth?.roles || [];
+    const shopToken = auth?.shop?.print_token || 'DEMO_A5D76E37';
     const supportMobile = system_settings?.support_mobile || '9098132966';
     const supportEmail = system_settings?.support_email || 'mynatech.in@gmail.com';
+
+    const isSuperAdmin = roles.some((r: string) => ['super-admin', 'SUPER ADMIN'].includes(r)) || permissions.includes('access-users-module');
 
     const { position } = useLayout();
 
     const [isSupportOpen, setIsSupportOpen] = useState(false);
     const [supportProblem, setSupportProblem] = useState('');
 
-    const filteredOps = shopOperationsGroup.filter((item) => !item.permission || permissions.includes(item.permission));
-    const filteredSettings = settingsGroup.filter((item) => !item.permission || permissions.includes(item.permission));
-    const filteredAdmin = adminGroup.filter((item) => !item.permission || permissions.includes(item.permission));
+    const filteredAdmin = superAdminAdministrationGroup.filter((item) => !item.permission || permissions.includes(item.permission));
 
     return (
         <>
@@ -162,9 +182,19 @@ export function AppSidebar() {
                 </SidebarHeader>
 
                 <SidebarContent className="gap-4">
-                    <NavMain label="Operations" items={filteredOps} position={position} />
-                    <NavMain label="Configuration" items={filteredSettings} position={position} />
-                    <NavMain label="Administration" items={filteredAdmin} position={position} />
+                    {isSuperAdmin ? (
+                        <>
+                            {/* Super Admin Sections */}
+                            <NavMain label="Platform Management" items={superAdminPlatformGroup} position={position} />
+                            <NavMain label="Administration" items={filteredAdmin} position={position} />
+                        </>
+                    ) : (
+                        <>
+                            {/* Shop Owner Primary Sections */}
+                            <NavMain label="Shop Operations" items={shopOperationsGroup} position={position} />
+                            <NavMain label="Shop Settings" items={shopSettingsGroup} position={position} />
+                        </>
+                    )}
 
                     {/* Need Support Sidebar Menu Item */}
                     <SidebarGroup className="px-2 mt-auto">

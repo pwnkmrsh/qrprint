@@ -119,6 +119,13 @@ export default function ShopSettings({
     activeTab: propActiveTab,
 }: ShopSettingsProps) {
     const [currentTab, setCurrentTab] = useState<string>(propActiveTab || 'shop-profile');
+
+    useEffect(() => {
+        if (propActiveTab) {
+            setCurrentTab(propActiveTab);
+        }
+    }, [propActiveTab]);
+
     const [detectedList, setDetectedList] = useState<DetectedPrinter[]>(initialDetectedPrinters || []);
     const [isDetecting, setIsDetecting] = useState(false);
     const [bwLiveStatus, setBwLiveStatus] = useState<PrinterStatusItem>(initialBwStatus);
